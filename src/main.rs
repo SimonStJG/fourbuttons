@@ -58,7 +58,7 @@ fn rppal_thread_target(
     tx: &Sender<InputResult>,
 ) -> Result<(), Box<dyn Error>> {
     loop {
-        let (button, _level) = rpi.poll_interrupts()?;
+        let button = rpi.wait_for_button_press()?;
         debug!("Sending: {:?}", button);
         let send_result = tx.send(Ok(button));
         debug!("Result: {:?}", send_result);

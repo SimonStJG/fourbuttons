@@ -7,6 +7,7 @@ use clokwerk::{Interval, Job, TimeUnits};
 pub(crate) enum ScheduledActivity {
     TakePills,
     WaterPlants,
+    #[allow(dead_code)]
     TestActivity,
 }
 
@@ -44,13 +45,11 @@ impl Scheduler {
                 buf1.lock().unwrap().push(ScheduledActivity::WaterPlants);
             });
 
-        let buf2 = buf.clone();
-        clokwerk
-            .every(Interval::Minutes(5))
-            .run(move || {
-                debug!("Scheduler triggering TestActivity");
-                buf2.lock().unwrap().push(ScheduledActivity::TestActivity);
-            });
+        // let buf2 = buf.clone();
+        // clokwerk.every(Interval::Minutes(5)).run(move || {
+        //     debug!("Scheduler triggering TestActivity");
+        //     buf2.lock().unwrap().push(ScheduledActivity::TestActivity);
+        // });
 
         Scheduler { clokwerk, buf: buf }
     }

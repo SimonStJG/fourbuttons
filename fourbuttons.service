@@ -1,0 +1,32 @@
+[Unit]
+Description=fourbuttons
+
+# If I don't do this then the service doesn't come up properly - fails to 
+# connect to /dev/mem.  And if I strace it I can see it's failing to 
+# connect to /dev/gpiomem first, which I think is the real error.
+# 
+# My hypothesis is that udevd is responsible for creating /dev/gpiomem, so
+# adding this means I'll wait for udevd to create /dev/gpiomem.
+#
+# From # https://www.freedesktop.org/software/systemd/man/latest/systemd-udev-settle.service.html :
+# > This service calls udevadm settle to wait until all events that have been
+# > queued by udev(7) have been processed. It is a crude way to wait until 
+# > "all" hardware has been discovered. Services may pull in this service and
+# > order themselves after it to wait for the udev queue to be empty.
+#
+# > ... Waiting for systemd-udev-settle.service usually slows boot 
+# > significantly, because it means waiting for all unrelated events too.
+# 
+# Looks like a better way is to tag the device with udevd and then wait 
+# for it that way, but that's for another day. https://superuser.com/a/1469799
+After=systemd-udev-settle.service
+
+[Service]
+User=simon
+Group=simon
+Environment=RUST_LOG=INFO
+WorkingDirectory=/home/simon
+ExecStart=/home/simon/fourbuttons
+
+[Install]
+WantedBy=multi-user.target

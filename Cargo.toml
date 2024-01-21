@@ -3,8 +3,6 @@ name = "fourbuttons"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 chrono = "0.4.31"
 clokwerk = "0.4.0"
@@ -16,4 +14,3 @@ rppal = "0.16.1"
 [dependencies.rusqlite]
 version = "0.30.0"
 features = ["bundled"]
-

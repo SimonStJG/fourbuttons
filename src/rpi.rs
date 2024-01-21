@@ -1,21 +1,27 @@
-use rppal::gpio::{Gpio, InputPin, Level, OutputPin};
+use rppal::gpio::{Gpio, InputPin, OutputPin};
 use std::{
+    env,
     error::Error,
     io::{self, Read, Stdin},
+    time::{Duration, Instant},
 };
 
 #[allow(unused_imports)]
 use log::{debug, error, info, warn};
 
-const USE_REAL_RPI: bool = false;
 const PIN_BUTTON_1: u8 = 2;
 const PIN_BUTTON_2: u8 = 3;
 const PIN_BUTTON_3: u8 = 20;
 const PIN_BUTTON_4: u8 = 21;
 const PIN_LED_1: u8 = 23;
 const PIN_LED_2: u8 = 24;
-const PIN_LED_3: u8 = 27;
-const PIN_LED_4: u8 = 22;
+const PIN_LED_3: u8 = 22;
+const PIN_LED_4: u8 = 27;
+
+// This does look ridiculously high, but I've seen bounces into the hundreds
+// of ms on these switches quite regularly, and I don't need to worry about
+// quick succession button presses for this machine.
+const DEBOUNCE_DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub(crate) enum Button {
@@ -23,7 +29,7 @@ pub(crate) enum Button {
     B2,
     B3,
     B4,
-    // Special button to top the app
+    // Special button to stop the app
     STOP,
 }
 
@@ -36,8 +42,7 @@ pub(crate) enum Led {
 }
 
 pub(crate) trait RpiInput {
-    fn poll_interrupts(self: &mut Self)
-        -> Result<(Button, rppal::gpio::Level), rppal::gpio::Error>;
+    fn wait_for_button_press(self: &mut Self) -> Result<Button, rppal::gpio::Error>;
 }
 
 pub(crate) trait RpiOutput {
@@ -47,31 +52,36 @@ pub(crate) trait RpiOutput {
 // We need +Send because this is going to be shared between threads later when used for I/O
 pub(crate) fn initialise_rpi(
 ) -> Result<(Box<dyn RpiInput + Send>, Box<dyn RpiOutput + Send>), Box<dyn Error>> {
-    if USE_REAL_RPI {
+    if !env::var("USE_FAKE_RPI").is_ok() {
+        info!("Initialising RPi");
         let gpio: rppal::gpio::Gpio = rppal::gpio::Gpio::new()?;
 
-        let mut btnpin1 = gpio.get(PIN_BUTTON_1)?.into_input();
-        let mut btnpin2 = gpio.get(PIN_BUTTON_2)?.into_input();
-        let mut btnpin3 = gpio.get(PIN_BUTTON_3)?.into_input();
-        let mut btnpin4 = gpio.get(PIN_BUTTON_4)?.into_input();
+        let mut btnpin1 = gpio.get(PIN_BUTTON_1)?.into_input_pullup();
+        let mut btnpin2 = gpio.get(PIN_BUTTON_2)?.into_input_pullup();
+        let mut btnpin3 = gpio.get(PIN_BUTTON_3)?.into_input_pullup();
+        let mut btnpin4 = gpio.get(PIN_BUTTON_4)?.into_input_pullup();
 
         let ledpin1 = gpio.get(PIN_LED_1)?.into_output_low();
         let ledpin2 = gpio.get(PIN_LED_2)?.into_output_low();
         let ledpin3 = gpio.get(PIN_LED_3)?.into_output_low();
         let ledpin4 = gpio.get(PIN_LED_4)?.into_output_low();
 
-        btnpin1.set_interrupt(rppal::gpio::Trigger::RisingEdge)?;
-        btnpin2.set_interrupt(rppal::gpio::Trigger::RisingEdge)?;
-        btnpin3.set_interrupt(rppal::gpio::Trigger::RisingEdge)?;
-        btnpin4.set_interrupt(rppal::gpio::Trigger::RisingEdge)?;
+        btnpin1.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
+        btnpin2.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
+        btnpin3.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
+        btnpin4.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
 
         return Ok((
             Box::new(RealRpiInput {
                 gpio,
-                btnpin1,
-                btnpin2,
-                btnpin3,
-                btnpin4,
+                pin1: btnpin1,
+                pin2: btnpin2,
+                pin3: btnpin3,
+                pin4: btnpin4,
+                last_trigger_1: Instant::now(),
+                last_trigger_2: Instant::now(),
+                last_trigger_3: Instant::now(),
+                last_trigger_4: Instant::now(),
             }),
             Box::new(RealRpiOutput {
                 ledpin1,
@@ -81,6 +91,7 @@ pub(crate) fn initialise_rpi(
             }),
         ));
     } else {
+        info!("Using fake RPi");
         Ok((
             Box::new(FakeRpiInput { stdin: io::stdin() }),
             Box::new(FakeRpiOutput {}),
@@ -90,33 +101,55 @@ pub(crate) fn initialise_rpi(
 
 struct RealRpiInput {
     gpio: Gpio,
-    btnpin1: InputPin,
-    btnpin2: InputPin,
-    btnpin3: InputPin,
-    btnpin4: InputPin,
+    pin1: InputPin,
+    pin2: InputPin,
+    pin3: InputPin,
+    pin4: InputPin,
+    last_trigger_1: Instant,
+    last_trigger_2: Instant,
+    last_trigger_3: Instant,
+    last_trigger_4: Instant,
+}
+
+fn debounce(button: Button, last_trigger: &mut Instant) -> Option<Button> {
+    let now = Instant::now();
+    let gap = now - *last_trigger;
+    debug!("Debouncer saw {:?} at {:?} (gap {:?})", button, now, gap);
+    if gap >= DEBOUNCE_DELAY {
+        *last_trigger = now;
+        return Some(button);
+    } else {
+        return None;
+    }
 }
 
 impl RpiInput for RealRpiInput {
-    fn poll_interrupts(
-        self: &mut Self,
-    ) -> Result<(Button, rppal::gpio::Level), rppal::gpio::Error> {
-        match self.gpio.poll_interrupts(
-            &[&self.btnpin1, &self.btnpin2, &self.btnpin3, &self.btnpin4],
-            // Setting `reset` to `false` returns any cached interrupt trigger events if available.
-            false,
-            None,
-        ) {
-            Ok(Some((pin, level))) => match pin.pin() {
-                1 => Ok((Button::B1, level)),
-                2 => Ok((Button::B2, level)),
-                3 => Ok((Button::B3, level)),
-                4 => Ok((Button::B4, level)),
-                unknown => panic!("Unexpected PIN value: {}", unknown),
-            },
-            Ok(None) => {
-                panic!("Blocking call to poll_interrupts should never return None")
+    fn wait_for_button_press(self: &mut Self) -> Result<Button, rppal::gpio::Error> {
+        loop {
+            match self.gpio.poll_interrupts(
+                &[&self.pin1, &self.pin2, &self.pin3, &self.pin4],
+                // Setting `reset` to `false` returns any cached interrupt trigger events if available.
+                false,
+                None,
+            ) {
+                Ok(Some((pin, _))) => {
+                    let trigger = match pin.pin() {
+                        PIN_BUTTON_1 => debounce(Button::B1, &mut self.last_trigger_1),
+                        PIN_BUTTON_2 => debounce(Button::B2, &mut self.last_trigger_2),
+                        PIN_BUTTON_3 => debounce(Button::B3, &mut self.last_trigger_3),
+                        PIN_BUTTON_4 => debounce(Button::B4, &mut self.last_trigger_4),
+                        unknown => panic!("Unexpected PIN value: {}", unknown),
+                    };
+                    match trigger {
+                        Some(button) => return Ok(button),
+                        None => continue,
+                    }
+                }
+                Ok(None) => {
+                    panic!("Blocking call to poll_interrupts should never return None")
+                }
+                Err(err) => return Err(err),
             }
-            Err(err) => Err(err),
         }
     }
 }
@@ -160,9 +193,7 @@ struct FakeRpiInput {
 }
 
 impl RpiInput for FakeRpiInput {
-    fn poll_interrupts(
-        self: &mut Self,
-    ) -> Result<(Button, rppal::gpio::Level), rppal::gpio::Error> {
+    fn wait_for_button_press(self: &mut Self) -> Result<Button, rppal::gpio::Error> {
         let mut next: [u8; 1] = [0; 1];
 
         loop {
@@ -178,13 +209,13 @@ impl RpiInput for FakeRpiInput {
             } else {
                 debug!("Read byte from stdin: {}", next[0]);
                 return match next[0] {
-                    49 => Ok((Button::B1, Level::High)),
-                    50 => Ok((Button::B2, Level::High)),
-                    51 => Ok((Button::B3, Level::High)),
-                    52 => Ok((Button::B4, Level::High)),
+                    49 => Ok(Button::B1),
+                    50 => Ok(Button::B2),
+                    51 => Ok(Button::B3),
+                    52 => Ok(Button::B4),
                     // Ignore enter key
                     10 => continue,
-                    113 => Ok((Button::STOP, Level::High)),
+                    113 => Ok(Button::STOP),
                     unknown => {
                         info!("Unknown input {}", unknown);
                         continue;

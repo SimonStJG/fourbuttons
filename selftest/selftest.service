@@ -1,0 +1,10 @@
+```
+[Unit]
+Description=selftest
+
+[Service]
+ExecStart=/home/simon/selftest.sh
+
+[Install]
+WantedBy=multi-user.target
+```
