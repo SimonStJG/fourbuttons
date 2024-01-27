@@ -3,6 +3,7 @@ Four Buttons
 
 * Run locally with `USE_FAKE_RPI=1 RUST_LOG=debug cargo run`.
 * Release with `./release.sh`.
+* Autoformat code with `cargo fmt`.
 
 ### Notes
 

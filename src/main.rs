@@ -190,8 +190,6 @@ fn main_loop(
                         match input {
                             Ok(button) => {
                                 info!("Saw button press {:?}", button);
-                                let event_id = button_to_event_id(&button);
-                                db.insert_reading(&Reading::new(event_id)).unwrap();
                                 // Whichever button is pressed, flash it
                                 // If it was pending, set it to not pending
                                 let (button_state, led) = match button {
@@ -210,6 +208,12 @@ fn main_loop(
                                     led: led,
                                     state: LedState::BlinkTemporary,
                                 }).unwrap();
+
+                                // Important to do this after we update the LED strategy
+                                // otherwise it feels laggy (this db.insert_reading
+                                // function is blocking).
+                                let event_id = button_to_event_id(&button);
+                                db.insert_reading(&Reading::new(event_id)).unwrap();
                             },
                             Err(_) => panic!("Input error on rx_input"),
                         }
