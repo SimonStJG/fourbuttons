@@ -230,6 +230,7 @@ fn main_loop(
 
 fn main() -> () {
     env_logger::init();
+    info!("Initialising");
     let db = Db::new().unwrap();
     let (rpi_input, rpi_output) = initialise_rpi().unwrap();
 
@@ -245,6 +246,7 @@ fn main() -> () {
     };
     let scheduler = Scheduler::new();
 
+    info!("Entering main loop");
     main_loop(
         db,
         scheduler,

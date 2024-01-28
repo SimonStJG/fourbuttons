@@ -18,7 +18,7 @@ pub(crate) struct Db {}
 
 impl Db {
     pub(crate) fn new() -> Result<Db, Error> {
-        info!("Initialising DB");
+        debug!("Initialising DB");
         let db = Db {};
         let conn = new_conn()?;
         conn.execute(
