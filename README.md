@@ -32,3 +32,9 @@ To automatically connect to the wifi on startup:
 To see if the wifi is connected: `nmcli connection show`.
 
 Manually reserved 192.168.0.94 on the router.
+
+## TODO
+
+* Still doesn't always startup cleanly, fails to connect to /dev/gpiomem sometimes
+* Should store schedule in a DB, so that it will still prompt for a missed action after a restart
+* Add more reminders
