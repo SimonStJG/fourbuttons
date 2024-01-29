@@ -23,18 +23,16 @@ The stripboarded elements (transistor & resistor):
 
 ## First time Raspberry Pi Configuration
 
-To automatically connect to the wifi on startup:
-
+Automatically connect to the wifi on startup:
 1. `nmcli device wifi connect "<SSID>" password "<password>"`
 2. `nmcli connection up "<SSID>"`
 3. `nmcli connection mod "<SSID>" connection.autoconnect yes`
-
-To see if the wifi is connected: `nmcli connection show`.
+(To see if the wifi is connected: `nmcli connection show`)
 
 Manually reserved 192.168.0.94 on the router.
 
 ## TODO
 
-* Still doesn't always startup cleanly, fails to connect to /dev/gpiomem sometimes
 * Should store schedule in a DB, so that it will still prompt for a missed action after a restart
 * Add more reminders
+* Go a bit more minimal and don't bother with sqlite or any of that, let's just read and write files

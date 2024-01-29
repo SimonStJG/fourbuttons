@@ -1,12 +1,8 @@
 use rppal::gpio::{Gpio, InputPin, OutputPin};
-use std::os::unix::fs::PermissionsExt;
 use std::{
     env,
     error::Error,
-    fs,
     io::{self, Read, Stdin},
-    path::Path,
-    thread,
     time::{Duration, Instant},
 };
 
@@ -59,7 +55,7 @@ pub(crate) fn initialise_rpi(
     if !env::var("USE_FAKE_RPI").is_ok() {
         debug!("Initialising RPi");
 
-        let gpio = new_rpi().unwrap();
+        let gpio = rppal::gpio::Gpio::new()?;
 
         let mut btnpin1 = gpio.get(PIN_BUTTON_1)?.into_input_pullup();
         let mut btnpin2 = gpio.get(PIN_BUTTON_2)?.into_input_pullup();
@@ -102,47 +98,6 @@ pub(crate) fn initialise_rpi(
             Box::new(FakeRpiOutput {}),
         ))
     }
-}
-
-fn new_rpi() -> Result<Gpio, rppal::gpio::Error> {
-    match rppal::gpio::Gpio::new() {
-        Ok(gpio) => Ok(gpio),
-        Err(rppal::gpio::Error::PermissionDenied(err)) => {
-            warn!(
-                "Permission denied on startup, trying to wait for /dev/gpiomem: {}",
-                err
-            );
-            wait_for_gpiomem();
-            info!("Found /dev/gpiomem, continuing");
-            rppal::gpio::Gpio::new()
-        }
-        Err(err) => Err(err),
-    }
-}
-
-// When starting as a system service, fourbuttons dies with a
-// PemissionDenied("/dev/mem"), but I can see that actually it's
-// failing to find /dev/gpiomem first.  Can't seem to find the right
-// thing to wait for with systemd, so bodge it by waiting up to 5s
-// for /dev/gpiomem to appear with the right permissions instead.
-fn wait_for_gpiomem() {
-    let gpio_mem = Path::new("/dev/gpiomem");
-    for _ in 1..10 {
-        match fs::metadata(gpio_mem) {
-            Ok(metadata) => {
-                // Even just checking for existence isn't enough,
-                // because it appears first with 0600 perms and
-                // then gets 0660 perms later.
-                if metadata.permissions().mode() & 0o060 != 0 {
-                    return;
-                }
-            }
-            Err(_) => {}
-        }
-        thread::sleep(Duration::from_millis(500));
-    }
-    // TODO Should return a real err type
-    panic!("Can't find /dev/gpiomem even after waiting")
 }
 
 struct RealRpiInput {

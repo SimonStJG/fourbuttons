@@ -1,0 +1,14 @@
+# Adds a systemd tag so that `/dev/gpiomem` is recognised as a systemd 
+# device, because we need this device to be available when the raspberry pi 
+# starts up.   Otherwise our service starts up too early and you get horrible
+# errors.
+# It's identical to the existing rule in /etc/udev/rules.d/99-com.rules, 
+# except with TAG+="systemd", and I think this only works because the rules
+# are evaluated in lexical order and 99-fourbuttons > 99-com, so this 
+# overwrites the rule in 99-com.rules, but what do I know really.  What
+# a confusing system this is.
+#
+# When debugging, you can check the systemd device status with 
+# systemctl list-units -a -t device
+
+SUBSYSTEM=="*gpiomem*", GROUP="gpio", MODE="0660", TAG+="systemd"

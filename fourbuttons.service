@@ -1,5 +1,7 @@
 [Unit]
 Description=fourbuttons
+Requires=dev-gpiomem.device
+After=dev-gpiomem.device
 
 [Service]
 Type=exec
