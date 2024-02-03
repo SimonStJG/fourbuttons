@@ -1,10 +1,12 @@
 #![deny(warnings)]
 
+mod activity;
 mod db;
 mod ledstrategy;
 mod rpi;
 mod scheduler;
 
+use chrono::Utc;
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
 use db::{Db, Reading};
 use ledstrategy::LedState;
@@ -17,6 +19,8 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+use crate::activity::Activity;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 enum ButtonState {
@@ -135,7 +139,7 @@ fn spawn_led_thread(
 
 fn main_loop(
     db: Db,
-    mut scheduler: Scheduler,
+    scheduler: &mut Scheduler,
     rx_timer: Receiver<Instant>,
     rx_input: Receiver<Result<Button, InputError>>,
     tx_led: Sender<LedStateChange>,
@@ -152,29 +156,24 @@ fn main_loop(
             recv(rx_timer) -> instant_result => {
                 match instant_result {
                     Ok(_) => {
-                        for activity in scheduler.tick() {
+                        // TODO Do we really need to check the time all the time?
+                        let now = Utc::now().naive_local();
+                        for activity in scheduler.tick(now) {
                             match activity {
-                                scheduler::ScheduledActivity::TakePills => {
+                                Activity::TakePills => {
                                     button_states.b1 = ButtonState::Pending;
                                     tx_led.send(LedStateChange{
                                         led: Led::L1,
                                         state: LedState::On,
                                     }).unwrap();
                                 },
-                                scheduler::ScheduledActivity::WaterPlants => {
+                                Activity::WaterPlants => {
                                     button_states.b4 = ButtonState::Pending;
                                     tx_led.send(LedStateChange{
                                         led: Led::L4,
                                         state: LedState::On,
                                     }).unwrap();
                                 },
-                                scheduler::ScheduledActivity::TestActivity => {
-                                    button_states.b3 = ButtonState::Pending;
-                                    tx_led.send(LedStateChange{
-                                        led: Led::L3,
-                                        state: LedState::On,
-                                    }).unwrap();
-                                }
                             }
                         }
                     }
@@ -244,12 +243,13 @@ fn main() -> () {
         spawn_led_thread(rpi_output, tick(Duration::from_millis(10)), rx).unwrap();
         tx
     };
-    let scheduler = Scheduler::new();
+    let now = Utc::now().naive_local();
+    let mut scheduler = Scheduler::new(now);
 
     info!("Entering main loop");
     main_loop(
         db,
-        scheduler,
+        &mut scheduler,
         tick(Duration::from_millis(1000)),
         rx_input,
         tx_led,

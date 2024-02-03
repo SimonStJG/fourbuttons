@@ -33,6 +33,8 @@ Manually reserved 192.168.0.94 on the router.
 
 ## TODO
 
-* Should store schedule in a DB, so that it will still prompt for a missed action after a restart
-* Add more reminders
-* Go a bit more minimal and don't bother with sqlite or any of that, let's just read and write files
+* Store Schedule in the DB
+* Connect the events to the schedule table
+* Add bi-weekly reminders
+* Add reminder which checks if the previous activity was actioned in a 
+  reasonable amount of time and then email me if it wasn't
