@@ -6,9 +6,9 @@ mod ledstrategy;
 mod rpi;
 mod scheduler;
 
-use chrono::Utc;
+use chrono::{NaiveDateTime, Utc};
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
-use db::{Db, Reading};
+use db::Db;
 use ledstrategy::LedState;
 use log::{debug, error, info};
 use rpi::{initialise_rpi, Button, Led, RpiInput, RpiOutput};
@@ -22,18 +22,10 @@ use std::{
 
 use crate::activity::Activity;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-enum ButtonState {
-    Pending,
-    NotPending,
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-struct ButtonStates {
-    b1: ButtonState,
-    b2: ButtonState,
-    b3: ButtonState,
-    b4: ButtonState,
+#[derive(Debug)]
+struct ApplicationState {
+    take_pills_pending: Option<NaiveDateTime>,
+    water_plants_pending: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -46,16 +38,6 @@ struct LedStateChange {
 struct InputError {}
 
 type InputResult = Result<Button, InputError>;
-
-fn button_to_event_id(button: &Button) -> i32 {
-    match *button {
-        Button::B1 => 1,
-        Button::B2 => 2,
-        Button::B3 => 3,
-        Button::B4 => 4,
-        Button::STOP => 100,
-    }
-}
 
 fn rppal_thread_target(
     mut rpi: Box<dyn RpiInput + Send>,
@@ -115,7 +97,7 @@ fn spawn_led_thread(
                                 strategies.tick(instant, &mut *rpi);
                             },
                             Err(_) => {
-                                error!("rx_timer disconnect");
+                                error!("rx_timer disconnect on LED thread");
                                 break
                             }
                         }
@@ -126,14 +108,13 @@ fn spawn_led_thread(
                                 strategies.update(&mut *rpi, state_change.led, state_change.state);
                             }
                             Err(_) => {
-                                error!("rx disconnect");
+                                info!("rx disconnect on LED thread");
                                 break
                             }
                         }
                     },
                 }
             }
-            info!("LED Thread shutdown");
         })
 }
 
@@ -144,38 +125,21 @@ fn main_loop(
     rx_input: Receiver<Result<Button, InputError>>,
     tx_led: Sender<LedStateChange>,
 ) {
-    let mut button_states = ButtonStates {
-        b1: ButtonState::NotPending,
-        b2: ButtonState::NotPending,
-        b3: ButtonState::NotPending,
-        b4: ButtonState::NotPending,
-    };
+    let mut application_state =
+        db.load_application_state()
+            .unwrap()
+            .unwrap_or_else(|| ApplicationState {
+                take_pills_pending: None,
+                water_plants_pending: None,
+            });
+    info!("Loaded state {:?}", application_state);
 
     loop {
         select! {
             recv(rx_timer) -> instant_result => {
                 match instant_result {
                     Ok(_) => {
-                        // TODO Do we really need to check the time all the time?
-                        let now = Utc::now().naive_local();
-                        for activity in scheduler.tick(now) {
-                            match activity {
-                                Activity::TakePills => {
-                                    button_states.b1 = ButtonState::Pending;
-                                    tx_led.send(LedStateChange{
-                                        led: Led::L1,
-                                        state: LedState::On,
-                                    }).unwrap();
-                                },
-                                Activity::WaterPlants => {
-                                    button_states.b4 = ButtonState::Pending;
-                                    tx_led.send(LedStateChange{
-                                        led: Led::L4,
-                                        state: LedState::On,
-                                    }).unwrap();
-                                },
-                            }
-                        }
+                        main_loop_tick(scheduler, &mut application_state, &tx_led, &db);
                     }
                     Err(err) => {
                         info!("scheduler disconnected ({}), shutting down", err);
@@ -188,31 +152,9 @@ fn main_loop(
                     Ok(input) => {
                         match input {
                             Ok(button) => {
-                                info!("Saw button press {:?}", button);
-                                // Whichever button is pressed, flash it
-                                // If it was pending, set it to not pending
-                                let (button_state, led) = match button {
-                                    Button::B1 => (&mut button_states.b1, Led::L1),
-                                    Button::B2 => (&mut button_states.b2, Led::L2),
-                                    Button::B3 => (&mut button_states.b3, Led::L3),
-                                    Button::B4 => (&mut button_states.b4, Led::L4),
-                                    Button::STOP => {
-                                        break
-                                    },
-                                };
-                                if *button_state == ButtonState::Pending {
-                                    *button_state = ButtonState::NotPending;
+                                if !main_loop_on_btn_input(&button, &mut application_state, &tx_led, &db) {
+                                    break;
                                 }
-                                tx_led.send(LedStateChange{
-                                    led: led,
-                                    state: LedState::BlinkTemporary,
-                                }).unwrap();
-
-                                // Important to do this after we update the LED strategy
-                                // otherwise it feels laggy (this db.insert_reading
-                                // function is blocking).
-                                let event_id = button_to_event_id(&button);
-                                db.insert_reading(&Reading::new(event_id)).unwrap();
                             },
                             Err(_) => panic!("Input error on rx_input"),
                         }
@@ -225,6 +167,86 @@ fn main_loop(
             }
         }
     }
+}
+
+fn main_loop_tick(
+    scheduler: &mut Scheduler,
+    application_state: &mut ApplicationState,
+    tx_led: &Sender<LedStateChange>,
+    db: &Db,
+) {
+    // TODO Do we really need to check the time all the time?
+    let now = Utc::now().naive_local();
+    for activity in scheduler.tick(now) {
+        match activity {
+            Activity::TakePills => {
+                application_state.take_pills_pending = Some(now);
+                tx_led
+                    .send(LedStateChange {
+                        led: Led::L1,
+                        state: LedState::On,
+                    })
+                    .unwrap();
+            }
+            Activity::WaterPlants => {
+                application_state.water_plants_pending = Some(now);
+                tx_led
+                    .send(LedStateChange {
+                        led: Led::L4,
+                        state: LedState::On,
+                    })
+                    .unwrap();
+            }
+        }
+    }
+
+    db.update_application_state(application_state).unwrap();
+}
+
+fn main_loop_on_btn_input(
+    button: &Button,
+    application_state: &mut ApplicationState,
+    tx_led: &Sender<LedStateChange>,
+    db: &Db,
+) -> bool {
+    info!("Saw button press {:?}", button);
+    // Whichever button is pressed, flash it
+    // Sent any pending application state to not pending
+    let led = match button {
+        Button::B1 => Led::L1,
+        Button::B2 => Led::L2,
+        Button::B3 => Led::L3,
+        Button::B4 => Led::L4,
+        Button::STOP => {
+            return false;
+        }
+    };
+
+    // Important to do this first otherwise it feels laggy
+    // (the db.insert_reading function called later is
+    // blocking).
+    tx_led
+        .send(LedStateChange {
+            led,
+            state: LedState::BlinkTemporary,
+        })
+        .unwrap();
+
+    match button {
+        Button::B1 => {
+            application_state.take_pills_pending = None;
+        }
+        Button::B2 => {}
+        Button::B3 => {}
+        Button::B4 => {
+            application_state.water_plants_pending = None;
+        }
+        Button::STOP => {}
+    };
+
+    db.update_application_state(application_state).unwrap();
+
+    return true;
 }
 
 fn main() -> () {
