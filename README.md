@@ -33,7 +33,6 @@ Manually reserved 192.168.0.94 on the router.
 
 ## TODO
 
-* Store Schedule in the DB
 * Connect the events to the schedule table
 * Add bi-weekly reminders
 * Add reminder which checks if the previous activity was actioned in a 
