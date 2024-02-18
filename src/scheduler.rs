@@ -16,13 +16,13 @@ impl Scheduler {
             jobs: vec![
                 Job::new(
                     now,
-                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).unwrap(),
+                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
                     every_day(),
                     Activity::TakePills,
                 ),
                 Job::new(
                     now,
-                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).unwrap(),
+                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
                     vec![Weekday::Sat],
                     Activity::WaterPlants,
                 ),

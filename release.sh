@@ -22,5 +22,6 @@ ssh simon@192.168.0.94 "
     sudo systemctl enable fourbuttons
 "
 
-echo 'To watch the logs, run:'
-echo '  ssh simon@192.168.0.94 "journalctl -u fourbuttons -f"'
+echo 'Watching logs...'
+
+ssh simon@192.168.0.94 "journalctl -u fourbuttons -f"

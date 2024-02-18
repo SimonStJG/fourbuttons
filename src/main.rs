@@ -1,14 +1,15 @@
 #![deny(warnings)]
 
 mod activity;
+mod appdb;
 mod db;
 mod ledstrategy;
 mod rpi;
 mod scheduler;
 
+use appdb::AppDb;
 use chrono::{NaiveDateTime, Utc};
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
-use db::Db;
 use ledstrategy::LedState;
 use log::{debug, error, info};
 use rpi::{initialise_rpi, Button, Led, RpiInput, RpiOutput};
@@ -20,9 +21,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::activity::Activity;
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct ApplicationState {
     take_pills_pending: Option<NaiveDateTime>,
     water_plants_pending: Option<NaiveDateTime>,
@@ -119,7 +118,7 @@ fn spawn_led_thread(
 }
 
 fn main_loop(
-    db: Db,
+    db: AppDb,
     scheduler: &mut Scheduler,
     rx_timer: Receiver<Instant>,
     rx_input: Receiver<Result<Button, InputError>>,
@@ -173,13 +172,13 @@ fn main_loop_tick(
     scheduler: &mut Scheduler,
     application_state: &mut ApplicationState,
     tx_led: &Sender<LedStateChange>,
-    db: &Db,
+    db: &AppDb,
 ) {
     // TODO Do we really need to check the time all the time?
     let now = Utc::now().naive_local();
     for activity in scheduler.tick(now) {
         match activity {
-            Activity::TakePills => {
+            activity::Activity::TakePills => {
                 application_state.take_pills_pending = Some(now);
                 tx_led
                     .send(LedStateChange {
@@ -188,7 +187,7 @@ fn main_loop_tick(
                     })
                     .unwrap();
             }
-            Activity::WaterPlants => {
+            activity::Activity::WaterPlants => {
                 application_state.water_plants_pending = Some(now);
                 tx_led
                     .send(LedStateChange {
@@ -207,7 +206,7 @@ fn main_loop_on_btn_input(
     button: &Button,
     application_state: &mut ApplicationState,
     tx_led: &Sender<LedStateChange>,
-    db: &Db,
+    db: &AppDb,
 ) -> bool {
     info!("Saw button press {:?}", button);
     // Whichever button is pressed, flash it
@@ -252,7 +251,9 @@ fn main_loop_on_btn_input(
 fn main() -> () {
     env_logger::init();
     info!("Initialising");
-    let db = Db::new().unwrap();
+    let db = AppDb::new("./db".to_string());
+    db.run_migrations().unwrap();
+
     let (rpi_input, rpi_output) = initialise_rpi().unwrap();
 
     let rx_input = {
