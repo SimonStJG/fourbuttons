@@ -130,7 +130,6 @@ mod tests {
         assert_eq!(appdb.load_application_state().unwrap().unwrap(), state);
     }
 
-
     #[test]
     fn save_and_load_empty_app_state() {
         let appdb = AppDb::new_tmp();

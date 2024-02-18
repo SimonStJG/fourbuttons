@@ -132,6 +132,24 @@ fn main_loop(
                 water_plants_pending: None,
             });
     info!("Loaded state {:?}", application_state);
+    // TODO De-duplicate with the logic in the main loop!!
+    // TODO Try to write some tests for this main logic?
+    if application_state.take_pills_pending.is_some() {
+        tx_led
+            .send(LedStateChange {
+                led: Led::L1,
+                state: LedState::On,
+            })
+            .unwrap();
+    }
+    if application_state.water_plants_pending.is_some() {
+        tx_led
+            .send(LedStateChange {
+                led: Led::L4,
+                state: LedState::On,
+            })
+            .unwrap();
+    }
 
     loop {
         select! {
