@@ -9,15 +9,21 @@ use crate::{
     ApplicationState,
 };
 
-pub(crate) const MIGRATIONS: &[Migration] = &[Migration {
-    id: "001",
-    sql: "CREATE TABLE application_state (
+pub(crate) const MIGRATIONS: &[Migration] = &[
+    Migration {
+        id: "001",
+        sql: "CREATE TABLE application_state (
                   id                    INTEGER PRIMARY KEY
                 , take_pills_pending    TIMESTAMP
-                , water_plants_pending  TIMETSTAMP
+                , water_plants_pending  TIMESTAMP
                 , created_on            DEFAULT CURRENT_TIMESTAMP
             )",
-}];
+    },
+    Migration {
+        id: "002",
+        sql: "ALTER TABLE application_state ADD COLUMN i_pending TIMESTAMP",
+    },
+];
 
 pub(crate) struct AppDb {
     db: Db,
@@ -35,14 +41,19 @@ impl AppDb {
         let water_plants_pending = application_state
             .water_plants_pending
             .map(|dt| fmt_naivedatetime_for_sqlite(&dt));
+        let i_pending = application_state
+            .i_pending
+            .map(|dt| fmt_naivedatetime_for_sqlite(&dt));
         conn.execute(
             "
                 INSERT INTO application_state (
                     take_pills_pending
-                  , water_plants_pending)
-                VALUES (?1, ?2)
+                  , water_plants_pending
+                  , i_pending
+                )
+                VALUES (?1, ?2, ?3)
             ",
-            &[&take_pills_pending, &water_plants_pending],
+            &[&take_pills_pending, &water_plants_pending, &i_pending],
         )?;
         Ok(())
     }
@@ -58,6 +69,7 @@ impl AppDb {
                 SELECT 
                       take_pills_pending
                     , water_plants_pending 
+                    , i_pending
                 FROM application_state
                 ORDER BY id DESC
                 LIMIT 1
@@ -67,22 +79,27 @@ impl AppDb {
                     Ok((
                         row.get::<usize, Option<String>>(0)?,
                         row.get::<usize, Option<String>>(1)?,
+                        row.get::<usize, Option<String>>(2)?,
                     ))
                 },
             )
             .optional()?;
 
         match result {
-            Some((take_pills, water_plants)) => {
+            Some((take_pills, water_plants, i)) => {
                 let take_pills_pending = take_pills
                     .map(|dt: String| parse_naivedatetime_from_sqlite(&dt))
                     .transpose()?;
                 let water_plants_pending = water_plants
                     .map(|dt: String| parse_naivedatetime_from_sqlite(&dt))
                     .transpose()?;
+                let i_pending = i
+                    .map(|dt: String| parse_naivedatetime_from_sqlite(&dt))
+                    .transpose()?;
                 Ok(Some(ApplicationState {
                     take_pills_pending,
                     water_plants_pending,
+                    i_pending,
                 }))
             }
             None => Ok(None),
@@ -121,9 +138,11 @@ mod tests {
 
         let take_pills_pending = Some(NaiveDateTime::from_str("2020-01-01T08:00:00").unwrap());
         let water_plants_pending = Some(NaiveDateTime::from_str("2020-01-02T08:00:01").unwrap());
+        let i_pending = Some(NaiveDateTime::from_str("2020-01-02T08:00:02").unwrap());
         let state = ApplicationState {
             take_pills_pending,
             water_plants_pending,
+            i_pending,
         };
         appdb.update_application_state(&state).unwrap();
 
@@ -138,6 +157,7 @@ mod tests {
         let state = ApplicationState {
             take_pills_pending: None,
             water_plants_pending: None,
+            i_pending: None,
         };
         appdb.update_application_state(&state).unwrap();
 

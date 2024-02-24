@@ -5,10 +5,11 @@ mod appdb;
 mod db;
 mod ledstrategy;
 mod rpi;
+mod schedule;
 mod scheduler;
 
 use appdb::AppDb;
-use chrono::{NaiveDateTime, Utc};
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
 use ledstrategy::LedState;
 use log::{debug, error, info};
@@ -17,14 +18,22 @@ use scheduler::Scheduler;
 use std::{
     error::Error,
     prelude::v1::Result,
+    str::FromStr,
     thread,
     time::{Duration, Instant},
+};
+
+use crate::{
+    activity::Activity,
+    schedule::{every_day, DailySchedule, Schedule, WeeklySchedule},
+    scheduler::ScheduledJobSpec,
 };
 
 #[derive(Debug, PartialEq)]
 struct ApplicationState {
     take_pills_pending: Option<NaiveDateTime>,
     water_plants_pending: Option<NaiveDateTime>,
+    i_pending: Option<NaiveDateTime>,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -130,6 +139,7 @@ fn main_loop(
             .unwrap_or_else(|| ApplicationState {
                 take_pills_pending: None,
                 water_plants_pending: None,
+                i_pending: None,
             });
     info!("Loaded state {:?}", application_state);
     // TODO De-duplicate with the logic in the main loop!!
@@ -146,6 +156,14 @@ fn main_loop(
         tx_led
             .send(LedStateChange {
                 led: Led::L4,
+                state: LedState::On,
+            })
+            .unwrap();
+    }
+    if application_state.i_pending.is_some() {
+        tx_led
+            .send(LedStateChange {
+                led: Led::L3,
                 state: LedState::On,
             })
             .unwrap();
@@ -214,6 +232,15 @@ fn main_loop_tick(
                     })
                     .unwrap();
             }
+            activity::Activity::I => {
+                application_state.i_pending = Some(now);
+                tx_led
+                    .send(LedStateChange {
+                        led: Led::L3,
+                        state: LedState::On,
+                    })
+                    .unwrap();
+            }
         }
     }
 
@@ -254,7 +281,9 @@ fn main_loop_on_btn_input(
             application_state.take_pills_pending = None;
         }
         Button::B2 => {}
-        Button::B3 => {}
+        Button::B3 => {
+            application_state.i_pending = None;
+        }
         Button::B4 => {
             application_state.water_plants_pending = None;
         }
@@ -285,7 +314,33 @@ fn main() -> () {
         tx
     };
     let now = Utc::now().naive_local();
-    let mut scheduler = Scheduler::new(now);
+    let mut scheduler = Scheduler::new(
+        now,
+        vec![
+            ScheduledJobSpec::new(
+                Schedule::Daily(DailySchedule::new(
+                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
+                    every_day(),
+                )),
+                Activity::TakePills,
+            ),
+            ScheduledJobSpec::new(
+                Schedule::Daily(DailySchedule::new(
+                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
+                    vec![Weekday::Sat],
+                )),
+                Activity::WaterPlants,
+            ),
+            ScheduledJobSpec::new(
+                Schedule::Weekly(WeeklySchedule::new(
+                    NaiveDate::from_str("2024-03-14").unwrap(),
+                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
+                    2,
+                )),
+                Activity::I,
+            ),
+        ],
+    );
 
     info!("Entering main loop");
     main_loop(
