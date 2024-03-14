@@ -6,10 +6,13 @@ edition = "2021"
 [dependencies]
 chrono = "0.4.31"
 crossbeam-channel = "0.5.10"
+curl = "0.4.46"
 env_logger = "0.10.1"
 log = "0.4.20"
 rppal = "0.16.1"
+openssl = { version = "0.10", features = ["vendored"] }
 
 [dependencies.rusqlite]
 version = "0.30.0"
 features = ["bundled"]
+

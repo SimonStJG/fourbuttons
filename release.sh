@@ -6,7 +6,12 @@ cargo fmt --check
 cargo test
 cross build --target arm-unknown-linux-gnueabihf --release
 ssh simon@192.168.0.94 "sudo systemctl stop fourbuttons"
-scp target/arm-unknown-linux-gnueabihf/release/fourbuttons fourbuttons.service 99-fourbuttons.rules simon@192.168.0.94:/home/simon/
+scp target/arm-unknown-linux-gnueabihf/release/fourbuttons \
+    fourbuttons.service \
+    99-fourbuttons.rules \
+    mailgun-apikey \
+    to-address \
+    simon@192.168.0.94:/home/simon/
 ssh simon@192.168.0.94 "
     set -euxo pipefail
 

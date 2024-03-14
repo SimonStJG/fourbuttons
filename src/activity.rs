@@ -3,4 +3,5 @@ pub(crate) enum Activity {
     TakePills,
     I,
     WaterPlants,
+    TakePillsReminder,
 }

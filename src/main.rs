@@ -3,6 +3,7 @@
 mod activity;
 mod appdb;
 mod db;
+mod email;
 mod ledstrategy;
 mod rpi;
 mod schedule;
@@ -17,6 +18,7 @@ use rpi::{initialise_rpi, Button, Led, RpiInput, RpiOutput};
 use scheduler::Scheduler;
 use std::{
     error::Error,
+    fs,
     prelude::v1::Result,
     str::FromStr,
     thread,
@@ -25,6 +27,7 @@ use std::{
 
 use crate::{
     activity::Activity,
+    email::Email,
     schedule::{every_day, DailySchedule, Schedule, WeeklySchedule},
     scheduler::ScheduledJobSpec,
 };
@@ -132,6 +135,7 @@ fn main_loop(
     rx_timer: Receiver<Instant>,
     rx_input: Receiver<Result<Button, InputError>>,
     tx_led: Sender<LedStateChange>,
+    email: Email,
 ) {
     let mut application_state =
         db.load_application_state()
@@ -174,7 +178,7 @@ fn main_loop(
             recv(rx_timer) -> instant_result => {
                 match instant_result {
                     Ok(_) => {
-                        main_loop_tick(scheduler, &mut application_state, &tx_led, &db);
+                        main_loop_tick(scheduler, &mut application_state, &tx_led, &db, &email);
                     }
                     Err(err) => {
                         info!("scheduler disconnected ({}), shutting down", err);
@@ -209,6 +213,7 @@ fn main_loop_tick(
     application_state: &mut ApplicationState,
     tx_led: &Sender<LedStateChange>,
     db: &AppDb,
+    email: &Email,
 ) {
     // TODO Do we really need to check the time all the time?
     let now = Utc::now().naive_local();
@@ -240,6 +245,12 @@ fn main_loop_tick(
                         state: LedState::On,
                     })
                     .unwrap();
+            }
+            activity::Activity::TakePillsReminder => {
+                if application_state.take_pills_pending.is_some() {
+                    // It's still pending!  Time to complain further
+                    email.send("Did you forget to take your pills you fool");
+                }
             }
         }
     }
@@ -299,6 +310,13 @@ fn main() -> () {
     env_logger::init();
     info!("Initialising");
     let db = AppDb::new("./db".to_string());
+    let mailgun_api_key = fs::read_to_string("./mailgun-apikey").expect("Missing mailgun-apikey");
+    let to_address = fs::read_to_string("./to-address").expect("Missing to-address");
+    let email = Email::new(
+        mailgun_api_key.trim().to_owned(),
+        to_address.trim().to_owned(),
+    );
+
     db.run_migrations().unwrap();
 
     let (rpi_input, rpi_output) = initialise_rpi().unwrap();
@@ -326,6 +344,13 @@ fn main() -> () {
             ),
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
+                    NaiveTime::from_hms_milli_opt(13, 0, 0, 0).expect("Invalid schedule"),
+                    every_day(),
+                )),
+                Activity::TakePillsReminder,
+            ),
+            ScheduledJobSpec::new(
+                Schedule::Daily(DailySchedule::new(
                     NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
                     vec![Weekday::Sat],
                 )),
@@ -349,5 +374,6 @@ fn main() -> () {
         tick(Duration::from_millis(1000)),
         rx_input,
         tx_led,
+        email,
     );
 }

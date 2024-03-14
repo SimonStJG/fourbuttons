@@ -1,6 +1,9 @@
 use crate::{activity::Activity, schedule::Schedule};
 use chrono::{Duration, NaiveDateTime};
 
+// TODO Save scheduler state into the DB too
+
+// TODO Make this configurable too
 const GRACE_PERIOD_HOURS: i64 = 1;
 
 pub(crate) struct Scheduler {
@@ -48,7 +51,6 @@ impl ScheduledJobSpec {
 
 impl Job {
     fn tick(self: &mut Self, now: NaiveDateTime) -> Option<Activity> {
-        println!("{} {}", now, self.next_trigger);
         if now - self.next_trigger > Duration::hours(GRACE_PERIOD_HOURS) {
             // It's been so long since the last tick that we don't want to
             // trigger.  Just reset and wait for the next one.
