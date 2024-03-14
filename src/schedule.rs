@@ -143,7 +143,7 @@ mod tests {
         ));
         assert_eq!(
             schedule
-                .calculate_next_trigger(NaiveDateTime::from_str("2020-01-01T08:00:00").unwrap(),),
+                .calculate_next_trigger(NaiveDateTime::from_str("2020-01-01T08:00:00").unwrap()),
             NaiveDateTime::from_str("2020-01-01T09:00:00").unwrap()
         );
     }

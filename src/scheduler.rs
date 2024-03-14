@@ -48,15 +48,90 @@ impl ScheduledJobSpec {
 
 impl Job {
     fn tick(self: &mut Self, now: NaiveDateTime) -> Option<Activity> {
+        println!("{} {}", now, self.next_trigger);
         if now - self.next_trigger > Duration::hours(GRACE_PERIOD_HOURS) {
             // It's been so long since the last tick that we don't want to
             // trigger.  Just reset and wait for the next one.
             self.next_trigger = self.schedule.calculate_next_trigger(now);
             return None;
-        } else if now > self.next_trigger {
+        } else if now >= self.next_trigger {
             self.next_trigger = self.schedule.calculate_next_trigger(now);
             return Some(self.activity);
         }
         return None;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use chrono::{NaiveDateTime, NaiveTime};
+
+    use crate::{
+        activity::Activity,
+        schedule::{every_day, DailySchedule, Schedule},
+    };
+
+    use super::{ScheduledJobSpec, Scheduler};
+
+    #[test]
+    fn regular_ticks() {
+        let now = NaiveDateTime::from_str("2020-01-01T07:59:00").unwrap();
+        let job_spec = ScheduledJobSpec::new(
+            Schedule::Daily(DailySchedule::new(
+                NaiveTime::from_str("08:00:00").unwrap(),
+                every_day(),
+            )),
+            Activity::I,
+        );
+        let mut sched = Scheduler::new(now, vec![job_spec]);
+
+        assert_eq!(sched.tick(now), vec![]);
+        // Advance to scheduled time, see activity
+        let now = NaiveDateTime::from_str("2020-01-01T08:00:00").unwrap();
+        assert_eq!(sched.tick(now), vec![Activity::I]);
+
+        // Run again at scheduled time, don't see activity
+        let now = NaiveDateTime::from_str("2020-01-01T08:00:00").unwrap();
+        assert_eq!(sched.tick(now), vec![]);
+
+        // Advance past scheduled time
+        let now = NaiveDateTime::from_str("2020-01-01T08:00:01").unwrap();
+        assert_eq!(sched.tick(now), vec![]);
+    }
+
+    #[test]
+    fn within_grace_period() {
+        let now = NaiveDateTime::from_str("2020-01-01T07:59:00").unwrap();
+        let job_spec = ScheduledJobSpec::new(
+            Schedule::Daily(DailySchedule::new(
+                NaiveTime::from_str("08:00:00").unwrap(),
+                every_day(),
+            )),
+            Activity::I,
+        );
+        let mut sched = Scheduler::new(now, vec![job_spec]);
+
+        // Just before end of grace period
+        let now = NaiveDateTime::from_str("2020-01-01T09:00:00").unwrap();
+        assert_eq!(sched.tick(now), vec![Activity::I]);
+    }
+
+    #[test]
+    fn outside_of_grace_period() {
+        let now = NaiveDateTime::from_str("2020-01-01T07:59:00").unwrap();
+        let job_spec = ScheduledJobSpec::new(
+            Schedule::Daily(DailySchedule::new(
+                NaiveTime::from_str("08:00:00").unwrap(),
+                every_day(),
+            )),
+            Activity::I,
+        );
+        let mut sched = Scheduler::new(now, vec![job_spec]);
+
+        // Just outside of grace period
+        let now = NaiveDateTime::from_str("2020-01-01T09:00:01").unwrap();
+        assert_eq!(sched.tick(now), vec![]);
     }
 }
