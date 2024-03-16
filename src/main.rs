@@ -10,20 +10,13 @@ mod schedule;
 mod scheduler;
 
 use appdb::AppDb;
-use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
+use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
 use ledstrategy::LedState;
 use log::{debug, error, info};
 use rpi::{initialise_rpi, Button, Led, RpiInput, RpiOutput};
 use scheduler::Scheduler;
-use std::{
-    error::Error,
-    fs,
-    prelude::v1::Result,
-    str::FromStr,
-    thread,
-    time::{Duration, Instant},
-};
+use std::{error::Error, fs, prelude::v1::Result, str::FromStr, thread, time::Instant};
 
 use crate::{
     activity::Activity,
@@ -215,7 +208,6 @@ fn main_loop_tick(
     db: &AppDb,
     email: &Email,
 ) {
-    // TODO Do we really need to check the time all the time?
     let now = Utc::now().naive_local();
     for activity in scheduler.tick(now) {
         match activity {
@@ -328,7 +320,7 @@ fn main() -> () {
     };
     let tx_led = {
         let (tx, rx) = unbounded::<LedStateChange>();
-        spawn_led_thread(rpi_output, tick(Duration::from_millis(10)), rx).unwrap();
+        spawn_led_thread(rpi_output, tick(std::time::Duration::from_millis(10)), rx).unwrap();
         tx
     };
     let now = Utc::now().naive_local();
@@ -341,6 +333,7 @@ fn main() -> () {
                     every_day(),
                 )),
                 Activity::TakePills,
+                Duration::hours(1),
             ),
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
@@ -348,6 +341,7 @@ fn main() -> () {
                     every_day(),
                 )),
                 Activity::TakePillsReminder,
+                Duration::hours(1),
             ),
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
@@ -355,6 +349,7 @@ fn main() -> () {
                     vec![Weekday::Sat],
                 )),
                 Activity::WaterPlants,
+                Duration::hours(1),
             ),
             ScheduledJobSpec::new(
                 Schedule::Weekly(WeeklySchedule::new(
@@ -363,6 +358,7 @@ fn main() -> () {
                     2,
                 )),
                 Activity::I,
+                Duration::hours(12),
             ),
         ],
     );
@@ -371,7 +367,7 @@ fn main() -> () {
     main_loop(
         db,
         &mut scheduler,
-        tick(Duration::from_millis(1000)),
+        tick(std::time::Duration::from_millis(1000)),
         rx_input,
         tx_led,
         email,

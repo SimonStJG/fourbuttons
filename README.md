@@ -30,10 +30,3 @@ Automatically connect to the wifi on startup:
 (To see if the wifi is connected: `nmcli connection show`)
 
 Manually reserved 192.168.0.94 on the router.
-
-## TODO
-
-* Connect the events to the schedule table
-* Add bi-weekly reminders
-* Add reminder which checks if the previous activity was actioned in a 
-  reasonable amount of time and then email me if it wasn't

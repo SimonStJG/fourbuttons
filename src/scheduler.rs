@@ -3,9 +3,6 @@ use chrono::{Duration, NaiveDateTime};
 
 // TODO Save scheduler state into the DB too
 
-// TODO Make this configurable too
-const GRACE_PERIOD_HOURS: i64 = 1;
-
 pub(crate) struct Scheduler {
     jobs: Vec<Job>,
 }
@@ -13,12 +10,14 @@ pub(crate) struct Scheduler {
 pub(crate) struct ScheduledJobSpec {
     schedule: Schedule,
     activity: Activity,
+    grace_period: Duration,
 }
 
 struct Job {
     next_trigger: NaiveDateTime,
     schedule: Schedule,
     activity: Activity,
+    grace_period: Duration,
 }
 
 impl Scheduler {
@@ -32,6 +31,7 @@ impl Scheduler {
                     // Could I use a bitfield?
                     schedule: spec.schedule.clone(),
                     activity: spec.activity,
+                    grace_period: spec.grace_period,
                     next_trigger: spec.schedule.calculate_next_trigger(now),
                 })
                 .collect(),
@@ -44,14 +44,18 @@ impl Scheduler {
 }
 
 impl ScheduledJobSpec {
-    pub(crate) fn new(schedule: Schedule, activity: Activity) -> Self {
-        Self { schedule, activity }
+    pub(crate) fn new(schedule: Schedule, activity: Activity, grace_period: Duration) -> Self {
+        Self {
+            schedule,
+            activity,
+            grace_period,
+        }
     }
 }
 
 impl Job {
     fn tick(self: &mut Self, now: NaiveDateTime) -> Option<Activity> {
-        if now - self.next_trigger > Duration::hours(GRACE_PERIOD_HOURS) {
+        if now - self.next_trigger > self.grace_period {
             // It's been so long since the last tick that we don't want to
             // trigger.  Just reset and wait for the next one.
             self.next_trigger = self.schedule.calculate_next_trigger(now);
@@ -68,7 +72,7 @@ impl Job {
 mod tests {
     use std::str::FromStr;
 
-    use chrono::{NaiveDateTime, NaiveTime};
+    use chrono::{Duration, NaiveDateTime, NaiveTime};
 
     use crate::{
         activity::Activity,
@@ -86,6 +90,7 @@ mod tests {
                 every_day(),
             )),
             Activity::I,
+            Duration::hours(1),
         );
         let mut sched = Scheduler::new(now, vec![job_spec]);
 
@@ -112,6 +117,7 @@ mod tests {
                 every_day(),
             )),
             Activity::I,
+            Duration::hours(1),
         );
         let mut sched = Scheduler::new(now, vec![job_spec]);
 
@@ -129,6 +135,7 @@ mod tests {
                 every_day(),
             )),
             Activity::I,
+            Duration::hours(1),
         );
         let mut sched = Scheduler::new(now, vec![job_spec]);
 
