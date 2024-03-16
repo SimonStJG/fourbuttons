@@ -210,6 +210,8 @@ fn main_loop_tick(
 ) {
     let now = Utc::now().naive_local();
     for activity in scheduler.tick(now) {
+        info!("Activity triggered: {:?}", activity);
+
         match activity {
             activity::Activity::TakePills => {
                 application_state.take_pills_pending = Some(now);
@@ -337,7 +339,7 @@ fn main() -> () {
             ),
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
-                    NaiveTime::from_hms_milli_opt(13, 0, 0, 0).expect("Invalid schedule"),
+                    NaiveTime::from_hms_milli_opt(11, 0, 0, 0).expect("Invalid schedule"),
                     every_day(),
                 )),
                 Activity::TakePillsReminder,
