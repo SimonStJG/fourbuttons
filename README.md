@@ -30,3 +30,13 @@ Automatically connect to the wifi on startup:
 (To see if the wifi is connected: `nmcli connection show`)
 
 Manually reserved 192.168.0.94 on the router.
+
+## TODO
+
+Some things I could do?
+* "Better" error types (what does this mean in rust?)
+* Try out an Actor framework like Actix?  I seem to have written some crap
+  actors by accident already.  Relatedly, actually test the core notification
+  logic which is currently all tied up with threads.
+* Store scheduler state in DB.
+* Work out how to avoid all these messy unwraps.
