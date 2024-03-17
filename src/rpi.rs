@@ -143,7 +143,7 @@ impl RpiInput for RealRpiInput {
                         PIN_BUTTON_2 => debounce(Button::B2, &mut self.last_trigger_2),
                         PIN_BUTTON_3 => debounce(Button::B3, &mut self.last_trigger_3),
                         PIN_BUTTON_4 => debounce(Button::B4, &mut self.last_trigger_4),
-                        unknown => panic!("Unexpected PIN value: {}", unknown),
+                        unknown => panic!("Unexpected PIN value: {unknown}"),
                     };
                     match trigger {
                         Some(button) => return Ok(button),
@@ -168,19 +168,20 @@ pub(crate) struct RealRpiOutput {
 
 impl RpiOutput for RealRpiOutput {
     fn switch_led(&mut self, led: Led, is_on: bool) {
-        match is_on {
-            true => match led {
+        if is_on {
+            match led {
                 Led::L1 => self.ledpin1.set_high(),
                 Led::L2 => self.ledpin2.set_high(),
                 Led::L3 => self.ledpin3.set_high(),
                 Led::L4 => self.ledpin4.set_high(),
-            },
-            false => match led {
+            }
+        } else {
+            match led {
                 Led::L1 => self.ledpin1.set_low(),
                 Led::L2 => self.ledpin2.set_low(),
                 Led::L3 => self.ledpin3.set_low(),
                 Led::L4 => self.ledpin4.set_low(),
-            },
+            }
         }
     }
 }

@@ -27,8 +27,7 @@ impl fmt::Display for MigrationError {
             MigrationError::UnknownMigrationError(migration_id) => {
                 write!(
                     f,
-                    "migration ID {} in database doesn't appear in migration history",
-                    migration_id
+                    "migration ID {migration_id} in database doesn't appear in migration history"
                 )
             }
             MigrationError::RusqliteError(err) => err.fmt(f),
@@ -46,7 +45,7 @@ trait DbFilePath {
 
 impl DbFilePath for String {
     fn path(&self) -> String {
-        self.to_owned()
+        self.clone()
     }
 }
 
@@ -88,19 +87,7 @@ impl Db {
             .optional()?
             .is_some();
 
-        let current_migration = if !migrations_table_exists {
-            conn.execute(
-                "
-                    CREATE TABLE migrations (
-                        id             INTEGER PRIMARY KEY
-                        , migration_id TEXT
-                        , created_on   DEFAULT CURRENT_TIMESTAMP
-                    )
-                ",
-                (),
-            )?;
-            None
-        } else {
+        let current_migration = if migrations_table_exists {
             conn.query_row(
                 "
                     SELECT migration_id 
@@ -112,21 +99,30 @@ impl Db {
                 |row| row.get::<usize, String>(0),
             )
             .optional()?
+        } else {
+            conn.execute(
+                "
+                    CREATE TABLE migrations (
+                        id             INTEGER PRIMARY KEY
+                        , migration_id TEXT
+                        , created_on   DEFAULT CURRENT_TIMESTAMP
+                    )
+                ",
+                (),
+            )?;
+            None
         };
 
-        match current_migration {
-            Some(current_migration_id) => {
-                info!("Current DB migration: {}", current_migration_id);
-                migrations
-                    .iter()
-                    .position(|m| m.id == current_migration_id)
-                    .map(|idx| &migrations[idx + 1..])
-                    .ok_or(MigrationError::UnknownMigrationError(current_migration_id))
-            }
-            None => {
-                info!("Current DB migration: None");
-                Ok(migrations)
-            }
+        if let Some(current_migration_id) = current_migration {
+            info!("Current DB migration: {}", current_migration_id);
+            migrations
+                .iter()
+                .position(|m| m.id == current_migration_id)
+                .map(|idx| &migrations[idx + 1..])
+                .ok_or(MigrationError::UnknownMigrationError(current_migration_id))
+        } else {
+            info!("Current DB migration: None");
+            Ok(migrations)
         }
     }
 
@@ -165,6 +161,7 @@ pub(crate) fn fmt_naivedatetime_for_sqlite(datetime: &NaiveDateTime) -> String {
 #[cfg(test)]
 pub(crate) mod testhelper {
 
+    use std::fmt::Write;
     use std::{env, fs::File, io::Read};
 
     use super::{Db, DbFilePath};
@@ -191,7 +188,7 @@ pub(crate) mod testhelper {
 
     impl DbFilePath for TmpFile {
         fn path(&self) -> String {
-            self.path.to_owned()
+            self.path.clone()
         }
     }
 
@@ -202,9 +199,8 @@ pub(crate) mod testhelper {
         let mut buffer = [0u8; 1];
         rng.read_exact(&mut buffer).unwrap();
         let mut s: String = String::new();
-        use std::fmt::Write;
-        for b in buffer.iter() {
-            write!(s, "{:02x}", b).unwrap();
+        for b in &buffer {
+            write!(s, "{b:02x}").unwrap();
         }
 
         env::temp_dir().join(s).to_str().unwrap().to_string()

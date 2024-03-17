@@ -22,7 +22,7 @@ struct Job {
 }
 
 impl Scheduler {
-    pub(crate) fn new(now: NaiveDateTime, job_specs: Vec<ScheduledJobSpec>) -> Self {
+    pub(crate) fn new(now: NaiveDateTime, job_specs: &[ScheduledJobSpec]) -> Self {
         let jobs = job_specs
             .iter()
             .map(|spec| {
@@ -47,7 +47,10 @@ impl Scheduler {
     }
 
     pub(crate) fn tick(&mut self, now: NaiveDateTime) -> Vec<Activity> {
-        self.jobs.iter_mut().flat_map(|job| job.tick(now)).collect()
+        self.jobs
+            .iter_mut()
+            .filter_map(|job| job.tick(now))
+            .collect()
     }
 }
 
@@ -100,7 +103,7 @@ mod tests {
             Activity::I,
             Duration::hours(1),
         );
-        let mut sched = Scheduler::new(now, vec![job_spec]);
+        let mut sched = Scheduler::new(now, &[job_spec]);
 
         assert_eq!(sched.tick(now), vec![]);
         // Advance to scheduled time, see activity
@@ -127,7 +130,7 @@ mod tests {
             Activity::I,
             Duration::hours(1),
         );
-        let mut sched = Scheduler::new(now, vec![job_spec]);
+        let mut sched = Scheduler::new(now, &[job_spec]);
 
         // Just before end of grace period
         let now = NaiveDateTime::from_str("2020-01-01T09:00:00").unwrap();
@@ -145,7 +148,7 @@ mod tests {
             Activity::I,
             Duration::hours(1),
         );
-        let mut sched = Scheduler::new(now, vec![job_spec]);
+        let mut sched = Scheduler::new(now, &[job_spec]);
 
         // Just outside of grace period
         let now = NaiveDateTime::from_str("2020-01-01T09:00:01").unwrap();

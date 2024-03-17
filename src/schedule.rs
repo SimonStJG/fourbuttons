@@ -46,7 +46,7 @@ impl DailySchedule {
 
         // TODO All of this unwrapping looks awful, but what's the correct way to do it?
         //  Is there some kind of magic function which will cast i32 to u32 only if > 0?
-        let days_to_advance = days_from_monday(next_weekday)
+        let days_to_advance = days_from_monday(*next_weekday)
             - TryInto::<i32>::try_into(num_days_from_monday).unwrap();
         let next_trigger_date = if days_to_advance >= 0 {
             now.date()
@@ -68,8 +68,8 @@ impl WeeklySchedule {
     ) -> Self {
         Self {
             schedule_start_from,
-            schedule_time,
             schedule_repeat_every_n_weeks,
+            schedule_time,
         }
     }
 
@@ -120,7 +120,7 @@ pub(crate) fn every_day() -> Vec<Weekday> {
     ]
 }
 
-fn days_from_monday(weekday: &Weekday) -> i32 {
+fn days_from_monday(weekday: Weekday) -> i32 {
     // Like num_days_from_monday except returns as i32 which I need for all
     // of my signed arithmetic!
     TryInto::<i32>::try_into(weekday.num_days_from_monday()).unwrap()

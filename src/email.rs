@@ -38,19 +38,19 @@ impl Email {
             Ok(_) => {
                 let response_code = easy.response_code();
                 if response_code == Ok(200) {
-                    info!("Sent email {} to {}", message, self.to)
+                    info!("Sent email {} to {}", message, self.to);
                 } else {
                     error!(
                         "Failed to send email {} to {}, return code was {:?}",
                         message, self.to, response_code
-                    )
+                    );
                 }
             }
             Err(err) => {
                 error!(
                     "Failed to send email {} to {}, err was {:?}",
                     message, self.to, err
-                )
+                );
             }
         }
     }

@@ -1,4 +1,6 @@
 #![deny(warnings)]
+#![deny(clippy::all)]
+#![deny(clippy::pedantic)]
 
 mod activity;
 mod appdb;
@@ -96,25 +98,19 @@ fn spawn_led_thread(
             loop {
                 select! {
                     recv(rx_timer) -> timer_result => {
-                        match timer_result {
-                            Ok(instant) => {
-                                strategies.tick(instant, &mut *rpi);
-                            },
-                            Err(_) => {
-                                error!("rx_timer disconnect on LED thread");
-                                break
-                            }
+                        if let Ok(instant) = timer_result {
+                            strategies.tick(instant, &mut *rpi);
+                        } else {
+                            error!("rx_timer disconnect on LED thread");
+                            break
                         }
                     },
                     recv(rx) -> rx_result => {
-                        match rx_result {
-                            Ok(state_change) => {
-                                strategies.update(&mut *rpi, state_change.led, state_change.state);
-                            }
-                            Err(_) => {
-                                info!("rx disconnect on LED thread");
-                                break
-                            }
+                        if let Ok(state_change) = rx_result {
+                            strategies.update(&mut *rpi, state_change.led, state_change.state);
+                        } else {
+                            info!("rx disconnect on LED thread");
+                            break
                         }
                     },
                 }
@@ -123,12 +119,12 @@ fn spawn_led_thread(
 }
 
 fn main_loop(
-    db: AppDb,
+    db: &AppDb,
     scheduler: &mut Scheduler,
-    rx_timer: Receiver<Instant>,
-    rx_input: Receiver<Result<Button, InputError>>,
-    tx_led: Sender<LedStateChange>,
-    email: Email,
+    rx_timer: &Receiver<Instant>,
+    rx_input: &Receiver<Result<Button, InputError>>,
+    tx_led: &Sender<LedStateChange>,
+    email: &Email,
 ) {
     let mut application_state = db
         .load_application_state()
@@ -171,7 +167,7 @@ fn main_loop(
             recv(rx_timer) -> instant_result => {
                 match instant_result {
                     Ok(_) => {
-                        main_loop_tick(scheduler, &mut application_state, &tx_led, &db, &email);
+                        main_loop_tick(scheduler, &mut application_state, tx_led, db, email);
                     }
                     Err(err) => {
                         info!("scheduler disconnected ({}), shutting down", err);
@@ -182,13 +178,10 @@ fn main_loop(
             recv(rx_input) -> input_result => {
                 match input_result {
                     Ok(input) => {
-                        match input {
-                            Ok(button) => {
-                                if !main_loop_on_btn_input(&button, &mut application_state, &tx_led, &db) {
-                                    break;
-                                }
-                            },
-                            Err(_) => panic!("Input error on rx_input"),
+                        // TODO This looks terrible!  Better with proper actors.
+                        let button = input.expect("Input error on rx_input");
+                        if !main_loop_on_btn_input(button, &mut application_state, tx_led, db) {
+                            break;
                         }
                     }
                     Err(err) => {
@@ -253,7 +246,7 @@ fn main_loop_tick(
 }
 
 fn main_loop_on_btn_input(
-    button: &Button,
+    button: Button,
     application_state: &mut ApplicationState,
     tx_led: &Sender<LedStateChange>,
     db: &AppDb,
@@ -285,14 +278,13 @@ fn main_loop_on_btn_input(
         Button::B1 => {
             application_state.take_pills_pending = None;
         }
-        Button::B2 => {}
+        Button::B2 | Button::Stop => {}
         Button::B3 => {
             application_state.i_pending = None;
         }
         Button::B4 => {
             application_state.water_plants_pending = None;
         }
-        Button::Stop => {}
     };
 
     db.update_application_state(application_state).unwrap();
@@ -328,7 +320,7 @@ fn main() {
     let now = Utc::now().naive_local();
     let mut scheduler = Scheduler::new(
         now,
-        vec![
+        &[
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
                     NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
@@ -367,11 +359,11 @@ fn main() {
 
     info!("Entering main loop");
     main_loop(
-        db,
+        &db,
         &mut scheduler,
-        tick(std::time::Duration::from_millis(1000)),
-        rx_input,
-        tx_led,
-        email,
+        &tick(std::time::Duration::from_millis(1000)),
+        &rx_input,
+        &tx_led,
+        &email,
     );
 }
