@@ -11,7 +11,7 @@ impl Email {
         Self { apikey, to }
     }
 
-    pub(crate) fn send(self: &Self, message: &str) {
+    pub(crate) fn send(&self, message: &str) {
         let mut easy = Easy::new();
         let mut form = Form::new();
         form.part("from")

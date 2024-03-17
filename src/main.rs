@@ -52,7 +52,7 @@ fn rppal_thread_target(
         debug!("Sending: {:?}", button);
         let send_result = tx.send(Ok(button));
         debug!("Result: {:?}", send_result);
-        if let Err(_) = send_result {
+        if send_result.is_err() {
             // The only send error is receiver disconnected, so we can shut the thread down
             // cleanly
             return Ok(());
@@ -130,14 +130,14 @@ fn main_loop(
     tx_led: Sender<LedStateChange>,
     email: Email,
 ) {
-    let mut application_state =
-        db.load_application_state()
-            .unwrap()
-            .unwrap_or_else(|| ApplicationState {
-                take_pills_pending: None,
-                water_plants_pending: None,
-                i_pending: None,
-            });
+    let mut application_state = db
+        .load_application_state()
+        .unwrap()
+        .unwrap_or(ApplicationState {
+            take_pills_pending: None,
+            water_plants_pending: None,
+            i_pending: None,
+        });
     info!("Loaded state {:?}", application_state);
     // TODO De-duplicate with the logic in the main loop!!
     // TODO Try to write some tests for this main logic?
@@ -266,7 +266,7 @@ fn main_loop_on_btn_input(
         Button::B2 => Led::L2,
         Button::B3 => Led::L3,
         Button::B4 => Led::L4,
-        Button::STOP => {
+        Button::Stop => {
             return false;
         }
     };
@@ -292,15 +292,15 @@ fn main_loop_on_btn_input(
         Button::B4 => {
             application_state.water_plants_pending = None;
         }
-        Button::STOP => {}
+        Button::Stop => {}
     };
 
     db.update_application_state(application_state).unwrap();
 
-    return true;
+    true
 }
 
-fn main() -> () {
+fn main() {
     env_logger::init();
     info!("Initialising");
     let db = AppDb::new("./db".to_string());
@@ -313,16 +313,16 @@ fn main() -> () {
 
     db.run_migrations().unwrap();
 
-    let (rpi_input, rpi_output) = initialise_rpi().unwrap();
+    let rpi = initialise_rpi().unwrap();
 
     let rx_input = {
         let (tx, rx) = unbounded::<InputResult>();
-        spawn_rppal_thread(rpi_input, tx.clone()).unwrap();
+        spawn_rppal_thread(rpi.input, tx).unwrap();
         rx
     };
     let tx_led = {
         let (tx, rx) = unbounded::<LedStateChange>();
-        spawn_led_thread(rpi_output, tick(std::time::Duration::from_millis(10)), rx).unwrap();
+        spawn_led_thread(rpi.output, tick(std::time::Duration::from_millis(10)), rx).unwrap();
         tx
     };
     let now = Utc::now().naive_local();

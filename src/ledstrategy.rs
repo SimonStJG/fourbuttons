@@ -12,7 +12,7 @@ pub(crate) enum LedState {
 }
 
 pub(crate) trait LedStrategy {
-    fn tick(self: &mut Self, instant: Instant, rpi: &mut dyn RpiOutput);
+    fn tick(&mut self, instant: Instant, rpi: &mut dyn RpiOutput);
 }
 
 pub(crate) struct LedStrategies {
@@ -37,14 +37,14 @@ impl LedStrategies {
         }
     }
 
-    pub(crate) fn tick(self: &mut Self, instant: Instant, rpi: &mut dyn RpiOutput) {
+    pub(crate) fn tick(&mut self, instant: Instant, rpi: &mut dyn RpiOutput) {
         self.l1.tick(instant, rpi);
         self.l2.tick(instant, rpi);
         self.l3.tick(instant, rpi);
         self.l4.tick(instant, rpi);
     }
 
-    pub(crate) fn update(self: &mut Self, rpi: &mut dyn RpiOutput, led: Led, led_state: LedState) {
+    pub(crate) fn update(&mut self, rpi: &mut dyn RpiOutput, led: Led, led_state: LedState) {
         let new_state: Box<dyn LedStrategy> = match led_state {
             LedState::On => Box::new(LedStrategyOn::new(led, &mut *rpi)),
             LedState::Off => Box::new(LedStrategyOff::new(led, &mut *rpi)),
@@ -69,7 +69,7 @@ impl LedStrategyOn {
 }
 
 impl LedStrategy for LedStrategyOn {
-    fn tick(self: &mut Self, _instant: Instant, _rpi: &mut dyn RpiOutput) {}
+    fn tick(&mut self, _instant: Instant, _rpi: &mut dyn RpiOutput) {}
 }
 
 pub(crate) struct LedStrategyOff {}
@@ -82,7 +82,7 @@ impl LedStrategyOff {
 }
 
 impl LedStrategy for LedStrategyOff {
-    fn tick(self: &mut Self, _instant: Instant, _rpi: &mut dyn RpiOutput) {}
+    fn tick(&mut self, _instant: Instant, _rpi: &mut dyn RpiOutput) {}
 }
 
 pub(crate) struct LedStrategyBlinkTemporary {
@@ -108,7 +108,7 @@ impl LedStrategyBlinkTemporary {
 }
 
 impl LedStrategy for LedStrategyBlinkTemporary {
-    fn tick(self: &mut Self, instant: Instant, rpi: &mut dyn RpiOutput) {
+    fn tick(&mut self, instant: Instant, rpi: &mut dyn RpiOutput) {
         if self.stopped {
             return;
         }

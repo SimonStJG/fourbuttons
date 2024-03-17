@@ -41,11 +41,11 @@ static SQLITE_DATETIME_FMT: &str = "%Y-%m-%dT%H:%M:%S.%fZ";
 // A trait to make it easier to inject temporary database files when running
 // tests.
 trait DbFilePath {
-    fn path(self: &Self) -> String;
+    fn path(&self) -> String;
 }
 
 impl DbFilePath for String {
-    fn path(self: &Self) -> String {
+    fn path(&self) -> String {
         self.to_owned()
     }
 }
@@ -66,7 +66,7 @@ impl Db {
         }
     }
 
-    pub(crate) fn upgrade(self: &Self, migrations: &[Migration]) -> Result<(), MigrationError> {
+    pub(crate) fn upgrade(&self, migrations: &[Migration]) -> Result<(), MigrationError> {
         let migrations_to_run = self.calculate_migrations_to_run(migrations)?;
         self.run_migrations(migrations_to_run)?;
 
@@ -74,7 +74,7 @@ impl Db {
     }
 
     fn calculate_migrations_to_run<'a, 'b>(
-        self: &Self,
+        &self,
         migrations: &'a [Migration<'b>],
     ) -> Result<&'a [Migration<'b>], MigrationError> {
         let conn = self.new_conn()?;
@@ -130,11 +130,11 @@ impl Db {
         }
     }
 
-    pub(crate) fn new_conn(self: &Self) -> Result<Connection, rusqlite::Error> {
-        Ok(Connection::open(self.file_path.path())?)
+    pub(crate) fn new_conn(&self) -> Result<Connection, rusqlite::Error> {
+        Connection::open(self.file_path.path())
     }
 
-    fn run_migrations(self: &Self, migrations: &[Migration]) -> Result<(), MigrationError> {
+    fn run_migrations(&self, migrations: &[Migration]) -> Result<(), MigrationError> {
         for migration in migrations {
             info!("Running migration {}", migration.id);
             let conn = self.new_conn()?;
@@ -144,7 +144,7 @@ impl Db {
                     INSERT INTO migrations (migration_id)
                     VALUES (?1)
                 ",
-                &[&migration.id],
+                [&migration.id],
             )?;
         }
 
@@ -190,7 +190,7 @@ pub(crate) mod testhelper {
     }
 
     impl DbFilePath for TmpFile {
-        fn path(self: &Self) -> String {
+        fn path(&self) -> String {
             self.path.to_owned()
         }
     }
@@ -251,8 +251,8 @@ mod tests {
         db.upgrade(MIGRATIONS).unwrap();
 
         let conn = db.new_conn().unwrap();
-        assert_eq!(table_exists(&conn, "migrations"), true);
-        assert_eq!(table_exists(&conn, "t1"), true);
+        assert!(table_exists(&conn, "migrations"));
+        assert!(table_exists(&conn, "t1"));
     }
 
     #[test]
@@ -263,7 +263,7 @@ mod tests {
 
         {
             let conn = db.new_conn().unwrap();
-            assert_eq!(table_exists(&conn, "t1"), false);
+            assert!(!table_exists(&conn, "t1"));
         }
 
         // Now do a normal upgrade
@@ -271,7 +271,7 @@ mod tests {
 
         {
             let conn = db.new_conn().unwrap();
-            assert_eq!(table_exists(&conn, "t1"), true);
+            assert!(table_exists(&conn, "t1"));
         }
     }
 
@@ -284,16 +284,16 @@ mod tests {
 
         {
             let conn = db.new_conn().unwrap();
-            assert_eq!(table_exists(&conn, "t1"), true);
-            assert_eq!(table_exists(&conn, "t2"), false);
+            assert!(table_exists(&conn, "t1"));
+            assert!(!table_exists(&conn, "t2"));
         }
 
         // Apply the 002 migration
-        db.upgrade(&MIGRATIONS).unwrap();
+        db.upgrade(MIGRATIONS).unwrap();
         {
             let conn = db.new_conn().unwrap();
-            assert_eq!(table_exists(&conn, "t1"), true);
-            assert_eq!(table_exists(&conn, "t2"), true);
+            assert!(table_exists(&conn, "t1"));
+            assert!(table_exists(&conn, "t2"));
         }
     }
 
@@ -306,7 +306,7 @@ mod tests {
 
         {
             let conn = db.new_conn().unwrap();
-            assert_eq!(table_exists(&conn, "t2"), true);
+            assert!(table_exists(&conn, "t2"));
         }
 
         // Apply migrations without 002 in the history

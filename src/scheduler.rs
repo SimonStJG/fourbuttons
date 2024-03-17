@@ -46,7 +46,7 @@ impl Scheduler {
         Self { jobs }
     }
 
-    pub(crate) fn tick(self: &mut Self, now: NaiveDateTime) -> Vec<Activity> {
+    pub(crate) fn tick(&mut self, now: NaiveDateTime) -> Vec<Activity> {
         self.jobs.iter_mut().flat_map(|job| job.tick(now)).collect()
     }
 }
@@ -62,7 +62,7 @@ impl ScheduledJobSpec {
 }
 
 impl Job {
-    fn tick(self: &mut Self, now: NaiveDateTime) -> Option<Activity> {
+    fn tick(&mut self, now: NaiveDateTime) -> Option<Activity> {
         if now - self.next_trigger > self.grace_period {
             // It's been so long since the last tick that we don't want to
             // trigger.  Just reset and wait for the next one.
@@ -72,7 +72,7 @@ impl Job {
             self.next_trigger = self.schedule.calculate_next_trigger(now);
             return Some(self.activity);
         }
-        return None;
+        None
     }
 }
 

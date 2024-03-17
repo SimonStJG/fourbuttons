@@ -30,7 +30,7 @@ pub(crate) enum Button {
     B3,
     B4,
     // Special button to stop the app
-    STOP,
+    Stop,
 }
 
 #[derive(Debug, PartialEq, Copy, Clone)]
@@ -42,17 +42,21 @@ pub(crate) enum Led {
 }
 
 pub(crate) trait RpiInput {
-    fn wait_for_button_press(self: &mut Self) -> Result<Button, rppal::gpio::Error>;
+    fn wait_for_button_press(&mut self) -> Result<Button, rppal::gpio::Error>;
 }
 
 pub(crate) trait RpiOutput {
-    fn switch_led(self: &mut Self, led: Led, is_on: bool);
+    fn switch_led(&mut self, led: Led, is_on: bool);
+}
+
+pub(crate) struct Rpi {
+    pub(crate) input: Box<dyn RpiInput + Send>,
+    pub(crate) output: Box<dyn RpiOutput + Send>,
 }
 
 // We need +Send because this is going to be shared between threads later when used for I/O
-pub(crate) fn initialise_rpi(
-) -> Result<(Box<dyn RpiInput + Send>, Box<dyn RpiOutput + Send>), Box<dyn Error>> {
-    if !env::var("USE_FAKE_RPI").is_ok() {
+pub(crate) fn initialise_rpi() -> Result<Rpi, Box<dyn Error>> {
+    if env::var("USE_FAKE_RPI").is_err() {
         debug!("Initialising RPi");
 
         let gpio = rppal::gpio::Gpio::new()?;
@@ -72,8 +76,8 @@ pub(crate) fn initialise_rpi(
         btnpin3.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
         btnpin4.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
 
-        return Ok((
-            Box::new(RealRpiInput {
+        Ok(Rpi {
+            input: Box::new(RealRpiInput {
                 gpio,
                 pin1: btnpin1,
                 pin2: btnpin2,
@@ -84,19 +88,19 @@ pub(crate) fn initialise_rpi(
                 last_trigger_3: Instant::now(),
                 last_trigger_4: Instant::now(),
             }),
-            Box::new(RealRpiOutput {
+            output: Box::new(RealRpiOutput {
                 ledpin1,
                 ledpin2,
                 ledpin3,
                 ledpin4,
             }),
-        ));
+        })
     } else {
         info!("Using fake RPi");
-        Ok((
-            Box::new(FakeRpiInput { stdin: io::stdin() }),
-            Box::new(FakeRpiOutput {}),
-        ))
+        Ok(Rpi {
+            input: Box::new(FakeRpiInput { stdin: io::stdin() }),
+            output: Box::new(FakeRpiOutput {}),
+        })
     }
 }
 
@@ -118,14 +122,14 @@ fn debounce(button: Button, last_trigger: &mut Instant) -> Option<Button> {
     debug!("Debouncer saw {:?} at {:?} (gap {:?})", button, now, gap);
     if gap >= DEBOUNCE_DELAY {
         *last_trigger = now;
-        return Some(button);
+        Some(button)
     } else {
-        return None;
+        None
     }
 }
 
 impl RpiInput for RealRpiInput {
-    fn wait_for_button_press(self: &mut Self) -> Result<Button, rppal::gpio::Error> {
+    fn wait_for_button_press(&mut self) -> Result<Button, rppal::gpio::Error> {
         loop {
             match self.gpio.poll_interrupts(
                 &[&self.pin1, &self.pin2, &self.pin3, &self.pin4],
@@ -163,7 +167,7 @@ pub(crate) struct RealRpiOutput {
 }
 
 impl RpiOutput for RealRpiOutput {
-    fn switch_led(self: &mut Self, led: Led, is_on: bool) {
+    fn switch_led(&mut self, led: Led, is_on: bool) {
         match is_on {
             true => match led {
                 Led::L1 => self.ledpin1.set_high(),
@@ -184,7 +188,7 @@ impl RpiOutput for RealRpiOutput {
 struct FakeRpiOutput {}
 
 impl RpiOutput for FakeRpiOutput {
-    fn switch_led(self: &mut Self, led: Led, is_on: bool) {
+    fn switch_led(&mut self, led: Led, is_on: bool) {
         info!("Switching {:?} to {}", led, is_on);
     }
 }
@@ -194,7 +198,7 @@ struct FakeRpiInput {
 }
 
 impl RpiInput for FakeRpiInput {
-    fn wait_for_button_press(self: &mut Self) -> Result<Button, rppal::gpio::Error> {
+    fn wait_for_button_press(&mut self) -> Result<Button, rppal::gpio::Error> {
         let mut next: [u8; 1] = [0; 1];
 
         loop {
@@ -216,7 +220,7 @@ impl RpiInput for FakeRpiInput {
                     52 => Ok(Button::B4),
                     // Ignore enter key
                     10 => continue,
-                    113 => Ok(Button::STOP),
+                    113 => Ok(Button::Stop),
                     unknown => {
                         info!("Unknown input {}", unknown);
                         continue;

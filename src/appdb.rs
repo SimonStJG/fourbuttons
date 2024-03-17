@@ -31,7 +31,7 @@ pub(crate) struct AppDb {
 
 impl AppDb {
     pub(crate) fn update_application_state(
-        self: &Self,
+        &self,
         application_state: &ApplicationState,
     ) -> Result<(), rusqlite::Error> {
         let conn = self.db.new_conn()?;
@@ -53,13 +53,13 @@ impl AppDb {
                 )
                 VALUES (?1, ?2, ?3)
             ",
-            &[&take_pills_pending, &water_plants_pending, &i_pending],
+            [&take_pills_pending, &water_plants_pending, &i_pending],
         )?;
         Ok(())
     }
 
     pub(crate) fn load_application_state(
-        self: &Self,
+        &self,
         // TODO Stop boxing error
     ) -> Result<Option<ApplicationState>, Box<dyn Error>> {
         let conn = self.db.new_conn()?;
@@ -110,7 +110,7 @@ impl AppDb {
         Self { db: Db::new(path) }
     }
 
-    pub(crate) fn run_migrations(self: &Self) -> Result<(), MigrationError> {
+    pub(crate) fn run_migrations(&self) -> Result<(), MigrationError> {
         self.db.upgrade(MIGRATIONS)
     }
 }

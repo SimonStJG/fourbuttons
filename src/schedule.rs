@@ -28,7 +28,7 @@ impl DailySchedule {
         }
     }
 
-    fn calculate_next_trigger(self: &Self, now: NaiveDateTime) -> NaiveDateTime {
+    fn calculate_next_trigger(&self, now: NaiveDateTime) -> NaiveDateTime {
         let num_days_from_monday = now.weekday().num_days_from_monday();
 
         let next_weekday = if now.time() < self.schedule_time {
@@ -56,7 +56,7 @@ impl DailySchedule {
                 .add(Days::new((days_to_advance + 7).try_into().unwrap()))
         };
 
-        return NaiveDateTime::new(next_trigger_date, self.schedule_time);
+        NaiveDateTime::new(next_trigger_date, self.schedule_time)
     }
 }
 
@@ -93,14 +93,14 @@ impl WeeklySchedule {
 
         let trigger_date = now
             .date()
-            .checked_add_days(Days::new(u64::try_from(days_to_advance).unwrap()))
+            .checked_add_days(Days::new(days_to_advance))
             .unwrap();
-        return NaiveDateTime::new(trigger_date, self.schedule_time);
+        NaiveDateTime::new(trigger_date, self.schedule_time)
     }
 }
 
 impl Schedule {
-    pub(crate) fn calculate_next_trigger(self: &Self, now: NaiveDateTime) -> NaiveDateTime {
+    pub(crate) fn calculate_next_trigger(&self, now: NaiveDateTime) -> NaiveDateTime {
         match self {
             Schedule::Daily(schedule) => schedule.calculate_next_trigger(now),
             Schedule::Weekly(schedule) => schedule.calculate_next_trigger(now),
@@ -123,7 +123,7 @@ pub(crate) fn every_day() -> Vec<Weekday> {
 fn days_from_monday(weekday: &Weekday) -> i32 {
     // Like num_days_from_monday except returns as i32 which I need for all
     // of my signed arithmetic!
-    return TryInto::<i32>::try_into(weekday.num_days_from_monday()).unwrap();
+    TryInto::<i32>::try_into(weekday.num_days_from_monday()).unwrap()
 }
 
 #[cfg(test)]

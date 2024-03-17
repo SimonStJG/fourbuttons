@@ -3,6 +3,7 @@
 set -euxo pipefail
 
 cargo fmt --check
+cargo clippy
 cargo test
 cross build --target arm-unknown-linux-gnueabihf --release
 ssh simon@192.168.0.94 "sudo systemctl stop fourbuttons"
