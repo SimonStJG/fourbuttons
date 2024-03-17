@@ -1,5 +1,6 @@
 use crate::{activity::Activity, schedule::Schedule};
 use chrono::{Duration, NaiveDateTime};
+use log::info;
 
 // TODO Save scheduler state into the DB too
 
@@ -22,20 +23,27 @@ struct Job {
 
 impl Scheduler {
     pub(crate) fn new(now: NaiveDateTime, job_specs: Vec<ScheduledJobSpec>) -> Self {
-        Self {
-            jobs: job_specs
-                .iter()
-                .map(|spec| Job {
+        let jobs = job_specs
+            .iter()
+            .map(|spec| {
+                let next_trigger = spec.schedule.calculate_next_trigger(now);
+                info!(
+                    "Next trigger for {:?} will be at {}",
+                    spec.activity, next_trigger
+                );
+
+                Job {
                     // TODO I still don't really have a good feel for when to use this clone?
                     // Perhaps actually it's because the whole use of Vec is unnecessary for the schedule?
                     // Could I use a bitfield?
                     schedule: spec.schedule.clone(),
                     activity: spec.activity,
                     grace_period: spec.grace_period,
-                    next_trigger: spec.schedule.calculate_next_trigger(now),
-                })
-                .collect(),
-        }
+                    next_trigger,
+                }
+            })
+            .collect();
+        Self { jobs }
     }
 
     pub(crate) fn tick(self: &mut Self, now: NaiveDateTime) -> Vec<Activity> {
