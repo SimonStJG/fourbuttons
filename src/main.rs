@@ -27,6 +27,7 @@ use crate::{
     scheduler::ScheduledJobSpec,
 };
 
+#[allow(clippy::struct_field_names)]
 #[derive(Debug, PartialEq)]
 struct ApplicationState {
     take_pills_pending: Option<NaiveDateTime>,
@@ -70,7 +71,7 @@ fn spawn_rppal_thread(
         .name("rppal".to_string())
         .spawn(move || {
             match rppal_thread_target(rpi, &tx) {
-                Ok(_) => {
+                Ok(()) => {
                     info!("rppal thread shutting down cleanly");
                 }
                 Err(err) => {

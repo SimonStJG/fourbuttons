@@ -205,29 +205,25 @@ impl RpiInput for FakeRpiInput {
         loop {
             // Bit silly to read one byte at a time, but this is just for testing and
             // we're not going to be hammering the keyboard so never mind.
-            let bytes_read: usize = {
-                let mut handle = self.stdin.lock();
-                handle.read(&mut next)?
-            };
+            
+            let mut handle = self.stdin.lock();
+            let bytes_read = handle.read(&mut next)?;
+            assert!(bytes_read != 0, "Blocking read should never return 0?"); 
 
-            if bytes_read == 0 {
-                panic!("Blocking read should never return 0?")
-            } else {
-                debug!("Read byte from stdin: {}", next[0]);
-                return match next[0] {
-                    49 => Ok(Button::B1),
-                    50 => Ok(Button::B2),
-                    51 => Ok(Button::B3),
-                    52 => Ok(Button::B4),
-                    // Ignore enter key
-                    10 => continue,
-                    113 => Ok(Button::Stop),
-                    unknown => {
-                        info!("Unknown input {}", unknown);
-                        continue;
-                    }
-                };
-            }
+            debug!("Read byte from stdin: {}", next[0]);
+            return match next[0] {
+                49 => Ok(Button::B1),
+                50 => Ok(Button::B2),
+                51 => Ok(Button::B3),
+                52 => Ok(Button::B4),
+                // Ignore enter key
+                10 => continue,
+                113 => Ok(Button::Stop),
+                unknown => {
+                    info!("Unknown input {}", unknown);
+                    continue;
+                }
+            };
         }
     }
 }

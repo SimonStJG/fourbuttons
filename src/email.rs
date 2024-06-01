@@ -35,7 +35,7 @@ impl Email {
             .unwrap();
 
         match easy.perform() {
-            Ok(_) => {
+            Ok(()) => {
                 let response_code = easy.response_code();
                 if response_code == Ok(200) {
                     info!("Sent email {} to {}", message, self.to);
