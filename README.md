@@ -3,6 +3,11 @@ Four Buttons
 
 A machine with four light up buttons in a pretty box.  It reminds you to do certain tasks, like water the plants, on a set schedule.  Also an excuse to learn Rust.
 
+## Pre-requisites
+
+* docker or [podman](https://podman.io/docs/installation).
+* `cargo install cross` - for cross compilation
+
 ## Usage
 
 * Run locally with `USE_FAKE_RPI=1 RUST_LOG=debug cargo run`.
@@ -33,8 +38,9 @@ Manually reserved 192.168.0.94 on the router.
 
 ## TODO
 
-Some things I could do?
-* "Better" error types (what does this mean in rust?)
+Some things I could do?  But who has the time.
+* Devcontainer with pinned rust version, clippy version, etc
+* "Better" error types (what does this mean in rust?  anyhow?)
 * Try out an Actor framework like Actix?  I seem to have written some crap
   actors by accident already.  Relatedly, actually test the core notification
   logic which is currently all tied up with threads.
