@@ -74,10 +74,7 @@ impl WeeklySchedule {
     }
 
     fn calculate_next_trigger(&self, now: NaiveDateTime) -> NaiveDateTime {
-        let days_since_start_u: i64 = now
-            .date()
-            .signed_duration_since(self.start_from)
-            .num_days();
+        let days_since_start_u: i64 = now.date().signed_duration_since(self.start_from).num_days();
 
         let days_since_start =
             u64::try_from(days_since_start_u).expect("Schedule start time in the future");

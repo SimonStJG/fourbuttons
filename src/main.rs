@@ -12,7 +12,7 @@ mod schedule;
 mod scheduler;
 
 use appdb::AppDb;
-use chrono::{Duration, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
+use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
 use ledstrategy::LedState;
 use log::{debug, error, info};
@@ -318,7 +318,8 @@ fn main() {
         spawn_led_thread(rpi.output, tick(std::time::Duration::from_millis(10)), rx).unwrap();
         tx
     };
-    let now = Utc::now().naive_local();
+
+    let now = Local::now().naive_local();
     let mut scheduler = Scheduler::new(
         now,
         &[
@@ -348,7 +349,7 @@ fn main() {
             ),
             ScheduledJobSpec::new(
                 Schedule::Weekly(WeeklySchedule::new(
-                    NaiveDate::from_str("2024-03-14").unwrap(),
+                    NaiveDate::from_str("2024-03-13").unwrap(),
                     NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
                     2,
                 )),

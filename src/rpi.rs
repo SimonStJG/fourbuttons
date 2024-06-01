@@ -205,10 +205,10 @@ impl RpiInput for FakeRpiInput {
         loop {
             // Bit silly to read one byte at a time, but this is just for testing and
             // we're not going to be hammering the keyboard so never mind.
-            
+
             let mut handle = self.stdin.lock();
             let bytes_read = handle.read(&mut next)?;
-            assert!(bytes_read != 0, "Blocking read should never return 0?"); 
+            assert!(bytes_read != 0, "Blocking read should never return 0?");
 
             debug!("Read byte from stdin: {}", next[0]);
             return match next[0] {
