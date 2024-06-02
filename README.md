@@ -45,3 +45,4 @@ Some things I could do?  But who has the time.
   logic which is currently all tied up with threads.
 * Store scheduler state in DB.
 * Work out how to avoid all these messy unwraps.
+* Create a proper config class / don't store all the secrets in separate text files
