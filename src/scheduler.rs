@@ -70,12 +70,15 @@ impl Job {
             // It's been so long since the last tick that we don't want to
             // trigger.  Just reset and wait for the next one.
             self.next_trigger = self.schedule.calculate_next_trigger(now);
-            return None;
+
+            None
         } else if now >= self.next_trigger {
             self.next_trigger = self.schedule.calculate_next_trigger(now);
-            return Some(self.activity);
+
+            Some(self.activity)
+        } else {
+            None
         }
-        None
     }
 }
 
