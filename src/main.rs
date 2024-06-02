@@ -126,11 +126,10 @@ fn main_loop(
     rx_input: &Receiver<Result<Button>>,
     tx_led: &Sender<LedStateChange>,
     email: &Email,
-) {
-    // TODO Push all these unwraps up into the main function
+) -> Result<()> {
     let mut application_state = db
         .load_application_state()
-        .unwrap()
+        .context("Failed to load application state")?
         .unwrap_or(ApplicationState {
             take_pills_pending: None,
             water_plants_pending: None,
@@ -145,7 +144,7 @@ fn main_loop(
                 led: Led::L1,
                 state: LedState::On,
             })
-            .unwrap();
+            .context("Failed to send LedStateChange to tx_led")?;
     }
     if application_state.water_plants_pending.is_some() {
         tx_led
@@ -153,7 +152,7 @@ fn main_loop(
                 led: Led::L4,
                 state: LedState::On,
             })
-            .unwrap();
+            .context("Failed to send LedStateChange to tx_led")?;
     }
     if application_state.i_pending.is_some() {
         tx_led
@@ -161,7 +160,7 @@ fn main_loop(
                 led: Led::L3,
                 state: LedState::On,
             })
-            .unwrap();
+            .context("Failed to send LedStateChange to tx_led")?;
     }
 
     loop {
@@ -181,7 +180,7 @@ fn main_loop(
                 match input_result {
                     Ok(input) => {
                         // TODO This looks terrible!  Better with proper actors.
-                        let button = input.expect("Input error on rx_input");
+                        let button = input.context("Input error on rx_input")?;
                         if !main_loop_on_btn_input(button, &mut application_state, tx_led, db) {
                             break;
                         }
@@ -194,6 +193,8 @@ fn main_loop(
             }
         }
     }
+
+    Ok(())
 }
 
 fn main_loop_tick(
@@ -350,7 +351,7 @@ fn main() {
             ),
             ScheduledJobSpec::new(
                 Schedule::Weekly(WeeklySchedule::new(
-                    NaiveDate::from_str("2024-03-13").unwrap(),
+                    NaiveDate::from_str("2024-03-13").expect("Invalid schedule start"),
                     NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
                     2,
                 )),
@@ -368,5 +369,6 @@ fn main() {
         &rx_input,
         &tx_led,
         &email,
-    );
+    )
+    .expect("Failed to run main loop");
 }
