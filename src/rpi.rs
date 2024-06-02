@@ -1,13 +1,11 @@
+use anyhow::{Context, Result};
+use log::{debug, info};
 use rppal::gpio::{Gpio, InputPin, OutputPin};
 use std::{
     env,
-    error::Error,
     io::{self, Read, Stdin},
     time::{Duration, Instant},
 };
-
-#[allow(unused_imports)]
-use log::{debug, error, info, warn};
 
 const PIN_BUTTON_1: u8 = 2;
 const PIN_BUTTON_2: u8 = 3;
@@ -42,7 +40,7 @@ pub(crate) enum Led {
 }
 
 pub(crate) trait RpiInput {
-    fn wait_for_button_press(&mut self) -> Result<Button, rppal::gpio::Error>;
+    fn wait_for_button_press(&mut self) -> Result<Button>;
 }
 
 pub(crate) trait RpiOutput {
@@ -54,8 +52,7 @@ pub(crate) struct Rpi {
     pub(crate) output: Box<dyn RpiOutput + Send>,
 }
 
-// We need +Send because this is going to be shared between threads later when used for I/O
-pub(crate) fn initialise_rpi() -> Result<Rpi, Box<dyn Error>> {
+pub(crate) fn initialise_rpi() -> Result<Rpi> {
     if env::var("USE_FAKE_RPI").is_err() {
         debug!("Initialising RPi");
 
@@ -129,15 +126,19 @@ fn debounce(button: Button, last_trigger: &mut Instant) -> Option<Button> {
 }
 
 impl RpiInput for RealRpiInput {
-    fn wait_for_button_press(&mut self) -> Result<Button, rppal::gpio::Error> {
+    fn wait_for_button_press(&mut self) -> Result<Button> {
         loop {
-            match self.gpio.poll_interrupts(
-                &[&self.pin1, &self.pin2, &self.pin3, &self.pin4],
-                // Setting `reset` to `false` returns any cached interrupt trigger events if available.
-                false,
-                None,
-            ) {
-                Ok(Some((pin, _))) => {
+            match self
+                .gpio
+                .poll_interrupts(
+                    &[&self.pin1, &self.pin2, &self.pin3, &self.pin4],
+                    // Setting `reset` to `false` returns any cached interrupt trigger events if available.
+                    false,
+                    None,
+                )
+                .context("Failed to poll rpi gpio interrupts")?
+            {
+                Some((pin, _)) => {
                     let trigger = match pin.pin() {
                         PIN_BUTTON_1 => debounce(Button::B1, &mut self.last_trigger_1),
                         PIN_BUTTON_2 => debounce(Button::B2, &mut self.last_trigger_2),
@@ -150,10 +151,9 @@ impl RpiInput for RealRpiInput {
                         None => continue,
                     }
                 }
-                Ok(None) => {
+                None => {
                     panic!("Blocking call to poll_interrupts should never return None")
                 }
-                Err(err) => return Err(err),
             }
         }
     }
@@ -199,7 +199,7 @@ struct FakeRpiInput {
 }
 
 impl RpiInput for FakeRpiInput {
-    fn wait_for_button_press(&mut self) -> Result<Button, rppal::gpio::Error> {
+    fn wait_for_button_press(&mut self) -> Result<Button> {
         let mut next: [u8; 1] = [0; 1];
 
         loop {
@@ -208,6 +208,7 @@ impl RpiInput for FakeRpiInput {
 
             let mut handle = self.stdin.lock();
             let bytes_read = handle.read(&mut next)?;
+
             assert!(bytes_read != 0, "Blocking read should never return 0?");
 
             debug!("Read byte from stdin: {}", next[0]);

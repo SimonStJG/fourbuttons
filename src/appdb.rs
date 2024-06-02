@@ -1,11 +1,8 @@
+use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
-use std::error::Error;
 
 use crate::{
-    db::{
-        fmt_naivedatetime_for_sqlite, parse_naivedatetime_from_sqlite, Db, Migration,
-        MigrationError,
-    },
+    db::{fmt_naivedatetime_for_sqlite, parse_naivedatetime_from_sqlite, Db, Migration},
     ApplicationState,
 };
 
@@ -33,7 +30,7 @@ impl AppDb {
     pub(crate) fn update_application_state(
         &self,
         application_state: &ApplicationState,
-    ) -> Result<(), rusqlite::Error> {
+    ) -> Result<()> {
         let conn = self.db.new_conn()?;
         let take_pills_pending: Option<String> = application_state
             .take_pills_pending
@@ -54,14 +51,12 @@ impl AppDb {
                 VALUES (?1, ?2, ?3)
             ",
             [&take_pills_pending, &water_plants_pending, &i_pending],
-        )?;
+        )
+        .context("Failed to update application state")?;
         Ok(())
     }
 
-    pub(crate) fn load_application_state(
-        &self,
-        // TODO Stop boxing error
-    ) -> Result<Option<ApplicationState>, Box<dyn Error>> {
+    pub(crate) fn load_application_state(&self) -> Result<Option<ApplicationState>> {
         let conn = self.db.new_conn()?;
         let result = conn
             .query_row(
@@ -83,7 +78,8 @@ impl AppDb {
                     ))
                 },
             )
-            .optional()?;
+            .optional()
+            .context("Failed to load application state")?;
 
         match result {
             Some((take_pills, water_plants, i)) => {
@@ -110,7 +106,7 @@ impl AppDb {
         Self { db: Db::new(path) }
     }
 
-    pub(crate) fn run_migrations(&self) -> Result<(), MigrationError> {
+    pub(crate) fn run_migrations(&self) -> Result<()> {
         self.db.upgrade(MIGRATIONS)
     }
 }

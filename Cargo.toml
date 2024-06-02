@@ -11,6 +11,7 @@ env_logger = "0.10.1"
 log = "0.4.20"
 rppal = "0.16.1"
 openssl = { version = "0.10", features = ["vendored"] }
+anyhow = "1.0.86"
 
 [dependencies.rusqlite]
 version = "0.30.0"

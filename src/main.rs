@@ -11,6 +11,7 @@ mod rpi;
 mod schedule;
 mod scheduler;
 
+use anyhow::{anyhow, Context, Result};
 use appdb::AppDb;
 use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
 use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
@@ -18,7 +19,7 @@ use ledstrategy::LedState;
 use log::{debug, error, info};
 use rpi::{initialise_rpi, Button, Led, RpiInput, RpiOutput};
 use scheduler::Scheduler;
-use std::{error::Error, fs, prelude::v1::Result, str::FromStr, thread, time::Instant};
+use std::{fs, str::FromStr, thread, time::Instant};
 
 use crate::{
     activity::Activity,
@@ -41,17 +42,14 @@ struct LedStateChange {
     state: LedState,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-struct InputError {}
-
-type InputResult = Result<Button, InputError>;
-
 fn rppal_thread_target(
     mut rpi: Box<dyn RpiInput + Send>,
-    tx: &Sender<InputResult>,
-) -> Result<(), Box<dyn Error>> {
+    tx: &Sender<Result<Button>>,
+) -> Result<()> {
     loop {
-        let button = rpi.wait_for_button_press()?;
+        let button = rpi
+            .wait_for_button_press()
+            .context("Failed to wait for button press")?;
         debug!("Sending: {:?}", button);
         let send_result = tx.send(Ok(button));
         debug!("Result: {:?}", send_result);
@@ -65,8 +63,8 @@ fn rppal_thread_target(
 
 fn spawn_rppal_thread(
     rpi: Box<dyn RpiInput + Send>,
-    tx: Sender<InputResult>,
-) -> Result<thread::JoinHandle<()>, std::io::Error> {
+    tx: Sender<Result<Button>>,
+) -> Result<thread::JoinHandle<()>> {
     thread::Builder::new()
         .name("rppal".to_string())
         .spawn(move || {
@@ -79,18 +77,19 @@ fn spawn_rppal_thread(
                     // can't guaruntee it has the Send trait, so log instead.
                     error!("rppal thread died with err {}", err);
                     // If this fails it's because the receiver has already shut down.
-                    let send_result = tx.send(Err(InputError {}));
+                    let send_result = tx.send(Err(anyhow!("rppal thread died")));
                     debug!("rppal thread shutdown send result: {:?}", send_result);
                 }
             }
         })
+        .context("Failed to start LED thread")
 }
 
 fn spawn_led_thread(
     mut rpi: Box<dyn RpiOutput + Send>,
     rx_timer: Receiver<Instant>,
     rx: Receiver<LedStateChange>,
-) -> Result<thread::JoinHandle<()>, std::io::Error> {
+) -> Result<thread::JoinHandle<()>> {
     thread::Builder::new()
         .name("led".to_string())
         .spawn(move || {
@@ -117,16 +116,18 @@ fn spawn_led_thread(
                 }
             }
         })
+        .context("Failed to start LED thread")
 }
 
 fn main_loop(
     db: &AppDb,
     scheduler: &mut Scheduler,
     rx_timer: &Receiver<Instant>,
-    rx_input: &Receiver<Result<Button, InputError>>,
+    rx_input: &Receiver<Result<Button>>,
     tx_led: &Sender<LedStateChange>,
     email: &Email,
 ) {
+    // TODO Push all these unwraps up into the main function
     let mut application_state = db
         .load_application_state()
         .unwrap()
@@ -309,7 +310,7 @@ fn main() {
     let rpi = initialise_rpi().unwrap();
 
     let rx_input = {
-        let (tx, rx) = unbounded::<InputResult>();
+        let (tx, rx) = unbounded::<Result<Button>>();
         spawn_rppal_thread(rpi.input, tx).unwrap();
         rx
     };

@@ -1,37 +1,22 @@
 use std::{error::Error, fmt};
 
+use anyhow::{Context, Result};
 use chrono::NaiveDateTime;
-#[allow(unused_imports)]
-use log::{debug, error, info, warn};
+use log::info;
 use rusqlite::{Connection, OptionalExtension};
 
-// TODO have a generic error type for my whole app??
-#[derive(Debug, PartialEq)]
-pub(crate) enum MigrationError {
-    UnknownMigrationError(String),
-    RusqliteError(rusqlite::Error),
-}
+#[derive(Debug, PartialEq, PartialOrd)]
+struct UnknownMigrationError(String);
 
-impl From<rusqlite::Error> for MigrationError {
-    #[cold]
-    fn from(err: rusqlite::Error) -> MigrationError {
-        MigrationError::RusqliteError(err)
-    }
-}
+impl Error for UnknownMigrationError {}
 
-impl Error for MigrationError {}
-
-impl fmt::Display for MigrationError {
+impl fmt::Display for UnknownMigrationError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            MigrationError::UnknownMigrationError(migration_id) => {
-                write!(
-                    f,
-                    "migration ID {migration_id} in database doesn't appear in migration history"
-                )
-            }
-            MigrationError::RusqliteError(err) => err.fmt(f),
-        }
+        write!(
+            f,
+            "migration ID {} in database doesn't appear in migration history",
+            self.0
+        )
     }
 }
 
@@ -65,7 +50,7 @@ impl Db {
         }
     }
 
-    pub(crate) fn upgrade(&self, migrations: &[Migration]) -> Result<(), MigrationError> {
+    pub(crate) fn upgrade(&self, migrations: &[Migration]) -> Result<()> {
         let migrations_to_run = self.calculate_migrations_to_run(migrations)?;
         self.run_migrations(migrations_to_run)?;
 
@@ -75,7 +60,7 @@ impl Db {
     fn calculate_migrations_to_run<'a, 'b>(
         &self,
         migrations: &'a [Migration<'b>],
-    ) -> Result<&'a [Migration<'b>], MigrationError> {
+    ) -> Result<&'a [Migration<'b>]> {
         let conn = self.new_conn()?;
 
         let migrations_table_exists = conn
@@ -119,18 +104,18 @@ impl Db {
                 .iter()
                 .position(|m| m.id == current_migration_id)
                 .map(|idx| &migrations[idx + 1..])
-                .ok_or(MigrationError::UnknownMigrationError(current_migration_id))
+                .ok_or(UnknownMigrationError(current_migration_id).into())
         } else {
             info!("Current DB migration: None");
             Ok(migrations)
         }
     }
 
-    pub(crate) fn new_conn(&self) -> Result<Connection, rusqlite::Error> {
-        Connection::open(self.file_path.path())
+    pub(crate) fn new_conn(&self) -> Result<Connection> {
+        Connection::open(self.file_path.path()).context("Failed to open new sqlite connection")
     }
 
-    fn run_migrations(&self, migrations: &[Migration]) -> Result<(), MigrationError> {
+    fn run_migrations(&self, migrations: &[Migration]) -> Result<()> {
         for migration in migrations {
             info!("Running migration {}", migration.id);
             let conn = self.new_conn()?;
@@ -219,9 +204,7 @@ pub(crate) mod testhelper {
 mod tests {
     use rusqlite::{Connection, OptionalExtension};
 
-    use crate::db::MigrationError;
-
-    use super::{Db, Migration};
+    use super::{Db, Migration, UnknownMigrationError};
 
     static MIGRATIONS: &[Migration] = &[
         Migration {
@@ -306,27 +289,29 @@ mod tests {
         }
 
         // Apply migrations without 002 in the history
-        assert_eq!(
-            db.upgrade(&MIGRATIONS[0..1]).unwrap_err(),
-            MigrationError::UnknownMigrationError("002".to_string())
-        );
+        let err: UnknownMigrationError = db
+            .upgrade(&MIGRATIONS[0..1])
+            .unwrap_err()
+            .downcast()
+            .unwrap();
+
+        assert_eq!(err, UnknownMigrationError("002".to_owned()));
     }
 
     #[test]
     fn fail_on_invalid_migration() {
         let db = Db::new_tmp();
 
-        let err = db
+        let err: rusqlite::Error = db
             .upgrade(&[Migration {
                 id: "001",
                 sql: "oh no",
             }])
-            .unwrap_err();
+            .unwrap_err()
+            .downcast()
+            .unwrap();
 
-        match err {
-            MigrationError::UnknownMigrationError(_) => panic!(),
-            MigrationError::RusqliteError(_) => {}
-        }
+        assert!(matches!(err, rusqlite::Error::SqlInputError { .. }));
     }
 
     fn table_exists(conn: &Connection, table_name: &str) -> bool {

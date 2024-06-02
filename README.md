@@ -40,7 +40,6 @@ Manually reserved 192.168.0.94 on the router.
 
 Some things I could do?  But who has the time.
 * Devcontainer with pinned rust version, clippy version, etc
-* "Better" error types (what does this mean in rust?  anyhow?)
 * Try out an Actor framework like Actix?  I seem to have written some crap
   actors by accident already.  Relatedly, actually test the core notification
   logic which is currently all tied up with threads.
