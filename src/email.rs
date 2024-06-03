@@ -1,5 +1,6 @@
+use anyhow::{Context, Result};
 use curl::easy::{Auth, Easy, Form};
-use log::{error, info};
+use log::info;
 
 pub(crate) struct Email {
     apikey: String,
@@ -11,48 +12,48 @@ impl Email {
         Self { apikey, to }
     }
 
-    pub(crate) fn send(&self, message: &str) {
+    pub(crate) fn send(&self, message: &str) -> Result<()> {
         let mut easy = Easy::new();
         let mut form = Form::new();
         form.part("from")
             .contents("fourbuttons@simonstjg.org".as_bytes())
             .add()
-            .unwrap();
-        form.part("to").contents(self.to.as_bytes()).add().unwrap();
+            .context("Failed to add from part")?;
+        form.part("to")
+            .contents(self.to.as_bytes())
+            .add()
+            .context("Failed to add to part")?;
         form.part("subject")
             .contents("test".as_bytes())
             .add()
-            .unwrap();
+            .context("Failed to add subject part")?;
         form.part("text")
             .contents(message.as_bytes())
             .add()
-            .unwrap();
-        easy.httppost(form).unwrap();
-        easy.http_auth(Auth::new().basic(true)).unwrap();
-        easy.username("api").unwrap();
-        easy.password(&self.apikey).unwrap();
+            .context("Failed to add text part")?;
+        easy.httppost(form).context("Failed on httppost")?;
+        easy.http_auth(Auth::new().basic(true))
+            .context("Failed on http_auth")?;
+        easy.username("api").context("Failed on username")?;
+        easy.password(&self.apikey).context("Failed on password")?;
         easy.url("https://api.mailgun.net/v2/simonstjg.org/messages")
-            .unwrap();
+            .context("Failed on url")?;
 
-        match easy.perform() {
-            Ok(()) => {
-                let response_code = easy.response_code();
-                if response_code == Ok(200) {
-                    info!("Sent email {} to {}", message, self.to);
-                } else {
-                    error!(
-                        "Failed to send email {} to {}, return code was {:?}",
-                        message, self.to, response_code
-                    );
-                }
-            }
-            Err(err) => {
-                error!(
-                    "Failed to send email {} to {}, err was {:?}",
-                    message, self.to, err
-                );
-            }
+        easy.perform().context("perform failed")?;
+        let response_code = easy.response_code();
+
+        if response_code == Ok(200) {
+            info!("Sent email {} to {}", message, self.to);
+        } else {
+            anyhow::bail!(
+                "Failed to send email {} to {}, return code was {:?}",
+                message,
+                self.to,
+                response_code
+            );
         }
+
+        Ok(())
     }
 }
 
@@ -72,6 +73,6 @@ mod tests {
             to_address.trim().to_owned(),
         );
 
-        email.send("hello world!");
+        email.send("hello world!").unwrap();
     }
 }

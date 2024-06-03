@@ -44,8 +44,7 @@ impl DailySchedule {
         // is always non-empty
         .unwrap_or(self.days.first().unwrap());
 
-        // TODO All of this unwrapping looks awful, but what's the correct way to do it?
-        //  Is there some kind of magic function which will cast i32 to u32 only if > 0?
+        // All of this unwrapping looks awful, but I don't see a cleaner way to do it?
         let days_to_advance = days_from_monday(*next_weekday)
             - TryInto::<i32>::try_into(num_days_from_monday).unwrap();
         let next_trigger_date = if days_to_advance >= 0 {

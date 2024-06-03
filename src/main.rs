@@ -168,7 +168,7 @@ fn main_loop(
             recv(rx_timer) -> instant_result => {
                 match instant_result {
                     Ok(_) => {
-                        main_loop_tick(scheduler, &mut application_state, tx_led, db, email);
+                        main_loop_tick(scheduler, &mut application_state, tx_led, db, email)?;
                     }
                     Err(err) => {
                         info!("scheduler disconnected ({}), shutting down", err);
@@ -181,7 +181,7 @@ fn main_loop(
                     Ok(input) => {
                         // TODO This looks terrible!  Better with proper actors.
                         let button = input.context("Input error on rx_input")?;
-                        if !main_loop_on_btn_input(button, &mut application_state, tx_led, db) {
+                        if !main_loop_on_btn_input(button, &mut application_state, tx_led, db)? {
                             break;
                         }
                     }
@@ -203,7 +203,7 @@ fn main_loop_tick(
     tx_led: &Sender<LedStateChange>,
     db: &AppDb,
     email: &Email,
-) {
+) -> Result<()> {
     let now = Utc::now().naive_local();
     for activity in scheduler.tick(now) {
         info!("Activity triggered: {:?}", activity);
@@ -216,7 +216,9 @@ fn main_loop_tick(
                         led: Led::L1,
                         state: LedState::On,
                     })
-                    .unwrap();
+                    .context("Failed to send LedStateChange on tx_led")?;
+                db.update_application_state(application_state)
+                    .context("Failed to update application state")?;
             }
             activity::Activity::WaterPlants => {
                 application_state.water_plants_pending = Some(now);
@@ -225,7 +227,9 @@ fn main_loop_tick(
                         led: Led::L4,
                         state: LedState::On,
                     })
-                    .unwrap();
+                    .context("Failed to send LedStateChange on tx_led")?;
+                db.update_application_state(application_state)
+                    .context("Failed to update application state")?;
             }
             activity::Activity::I => {
                 application_state.i_pending = Some(now);
@@ -234,18 +238,22 @@ fn main_loop_tick(
                         led: Led::L3,
                         state: LedState::On,
                     })
-                    .unwrap();
+                    .context("Failed to send LedStateChange on tx_led")?;
+                db.update_application_state(application_state)
+                    .context("Failed to update application state")?;
             }
             activity::Activity::TakePillsReminder => {
                 if application_state.take_pills_pending.is_some() {
                     // It's still pending!  Time to complain further
-                    email.send("Did you forget to take your pills you fool");
+                    if let Err(err) = email.send("Did you forget to take your pills you fool") {
+                        error!("Failed to send email {:?}", err);
+                    }
                 }
             }
         }
     }
 
-    db.update_application_state(application_state).unwrap();
+    Ok(())
 }
 
 fn main_loop_on_btn_input(
@@ -253,7 +261,7 @@ fn main_loop_on_btn_input(
     application_state: &mut ApplicationState,
     tx_led: &Sender<LedStateChange>,
     db: &AppDb,
-) -> bool {
+) -> Result<bool> {
     info!("Saw button press {:?}", button);
     // Whichever button is pressed, flash it
     // Sent any pending application state to not pending
@@ -263,7 +271,7 @@ fn main_loop_on_btn_input(
         Button::B3 => Led::L3,
         Button::B4 => Led::L4,
         Button::Stop => {
-            return false;
+            return Ok(false);
         }
     };
 
@@ -275,7 +283,7 @@ fn main_loop_on_btn_input(
             led,
             state: LedState::BlinkTemporary,
         })
-        .unwrap();
+        .context("Failed to send LedStateChange to tx_led")?;
 
     match button {
         Button::B1 => {
@@ -290,9 +298,10 @@ fn main_loop_on_btn_input(
         }
     };
 
-    db.update_application_state(application_state).unwrap();
+    db.update_application_state(application_state)
+        .context("Failed to update application state")?;
 
-    true
+    Ok(true)
 }
 
 fn main() {
@@ -306,18 +315,19 @@ fn main() {
         to_address.trim().to_owned(),
     );
 
-    db.run_migrations().unwrap();
+    db.run_migrations().expect("Failed to run migrations");
 
-    let rpi = initialise_rpi().unwrap();
+    let rpi = initialise_rpi().expect("Failed to initialise rpi");
 
     let rx_input = {
         let (tx, rx) = unbounded::<Result<Button>>();
-        spawn_rppal_thread(rpi.input, tx).unwrap();
+        spawn_rppal_thread(rpi.input, tx).expect("Failed to spawn rppal thread");
         rx
     };
     let tx_led = {
         let (tx, rx) = unbounded::<LedStateChange>();
-        spawn_led_thread(rpi.output, tick(std::time::Duration::from_millis(10)), rx).unwrap();
+        spawn_led_thread(rpi.output, tick(std::time::Duration::from_millis(10)), rx)
+            .expect("Failed to spawn led thread");
         tx
     };
 
