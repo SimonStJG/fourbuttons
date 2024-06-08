@@ -1,6 +1,6 @@
 use std::sync::mpsc::Sender;
 
-use chrono::Utc;
+use chrono::Local;
 use log::info;
 
 use crate::scheduler::Scheduler;
@@ -31,7 +31,7 @@ impl Actor<SchedulerActorMessage> for SchedulerActor {
     }
 
     fn handle_message(&mut self, _: SchedulerActorMessage) -> anyhow::Result<()> {
-        let now = Utc::now().naive_local();
+        let now = Local::now().naive_local();
         for activity in self.scheduler.tick(now) {
             info!("Activity triggered: {:?}", activity);
             self.tx_control
