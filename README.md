@@ -39,9 +39,10 @@ Manually reserved 192.168.0.94 on the router.
 ## TODO
 
 Some things I could do?  But who has the time.
+* Tidy up my half-baked DIY actor framework!  
+  * Don't panic when stopping locally
+  * check what happens when we get SIGTERM, etc..
+* Test the core notification logic now it isn't all tied up with threads.
 * Devcontainer with pinned rust version, clippy version, etc
-* Try out an Actor framework like Actix?  I seem to have written some crap
-  actors by accident already.  Relatedly, actually test the core notification
-  logic which is currently all tied up with threads.
 * Store scheduler state in DB.
 * Create a proper config class / don't store all the secrets in separate text files

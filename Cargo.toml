@@ -5,7 +5,6 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.31"
-crossbeam-channel = "0.5.10"
 curl = "0.4.46"
 env_logger = "0.10.1"
 log = "0.4.20"
@@ -16,4 +15,3 @@ anyhow = "1.0.86"
 [dependencies.rusqlite]
 version = "0.30.0"
 features = ["bundled"]
-

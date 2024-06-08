@@ -1,9 +1,14 @@
 #![deny(warnings)]
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
+// TODO Fix these
+#![allow(clippy::module_name_repetitions)]
+#![allow(clippy::module_inception)]
 
 mod activity;
+mod actor;
 mod appdb;
+mod application_state;
 mod db;
 mod email;
 mod ledstrategy;
@@ -11,123 +16,53 @@ mod rpi;
 mod schedule;
 mod scheduler;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use appdb::AppDb;
-use chrono::{Duration, Local, NaiveDate, NaiveDateTime, NaiveTime, Utc, Weekday};
-use crossbeam_channel::{select, tick, unbounded, Receiver, Sender};
-use ledstrategy::LedState;
-use log::{debug, error, info};
-use rpi::{initialise_rpi, Button, Led, RpiInput, RpiOutput};
+use chrono::{Duration, Local, NaiveDate, NaiveTime, Weekday};
+use log::info;
+use rpi::initialise_rpi;
 use scheduler::Scheduler;
-use std::{fs, str::FromStr, thread, time::Instant};
+use std::{fs, str::FromStr, time::Instant};
 
 use crate::{
     activity::Activity,
+    actor::{
+        actor::ActorHandle,
+        control_actor::ControlActor,
+        led_actor::{LedActor, LedActorMessage},
+        rpi_input_actor::RpiInputActor,
+        scheduler_actor::{SchedulerActor, SchedulerActorMessage},
+        source_actor::SourceActorHandle,
+        tick_actor::TickActor,
+    },
+    application_state::ApplicationState,
     email::Email,
     schedule::{every_day, DailySchedule, Schedule, WeeklySchedule},
     scheduler::ScheduledJobSpec,
 };
 
-#[allow(clippy::struct_field_names)]
-#[derive(Debug, PartialEq)]
-struct ApplicationState {
-    take_pills_pending: Option<NaiveDateTime>,
-    water_plants_pending: Option<NaiveDateTime>,
-    i_pending: Option<NaiveDateTime>,
+fn main() {
+    env_logger::init();
+    info!("Initialising");
+    let (db, email, application_state, rpi, scheduler) =
+        initialise().expect("Initialisation error");
+    info!("Running actors");
+    run_actors(rpi, application_state, db, email, scheduler).expect("Abnormal shutdown");
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
-struct LedStateChange {
-    led: Led,
-    state: LedState,
-}
+fn initialise() -> Result<(AppDb, Email, ApplicationState, rpi::Rpi, Scheduler)> {
+    let db = AppDb::new("./db".to_string());
+    let mailgun_api_key =
+        fs::read_to_string("./mailgun-apikey").context("Missing mailgun-apikey")?;
+    let to_address = fs::read_to_string("./to-address").context("Missing to-address")?;
+    let email = Email::new(
+        mailgun_api_key.trim().to_owned(),
+        to_address.trim().to_owned(),
+    );
 
-fn rppal_thread_target(
-    mut rpi: Box<dyn RpiInput + Send>,
-    tx: &Sender<Result<Button>>,
-) -> Result<()> {
-    loop {
-        let button = rpi
-            .wait_for_button_press()
-            .context("Failed to wait for button press")?;
-        debug!("Sending: {:?}", button);
-        let send_result = tx.send(Ok(button));
-        debug!("Result: {:?}", send_result);
-        if send_result.is_err() {
-            // The only send error is receiver disconnected, so we can shut the thread down
-            // cleanly
-            return Ok(());
-        }
-    }
-}
+    db.run_migrations().context("Failed to run migrations")?;
 
-fn spawn_rppal_thread(
-    rpi: Box<dyn RpiInput + Send>,
-    tx: Sender<Result<Button>>,
-) -> Result<thread::JoinHandle<()>> {
-    thread::Builder::new()
-        .name("rppal".to_string())
-        .spawn(move || {
-            match rppal_thread_target(rpi, &tx) {
-                Ok(()) => {
-                    info!("rppal thread shutting down cleanly");
-                }
-                Err(err) => {
-                    // We can't easily send any old dyn Error over the channel because we
-                    // can't guaruntee it has the Send trait, so log instead.
-                    error!("rppal thread died with err {}", err);
-                    // If this fails it's because the receiver has already shut down.
-                    let send_result = tx.send(Err(anyhow!("rppal thread died")));
-                    debug!("rppal thread shutdown send result: {:?}", send_result);
-                }
-            }
-        })
-        .context("Failed to start LED thread")
-}
-
-fn spawn_led_thread(
-    mut rpi: Box<dyn RpiOutput + Send>,
-    rx_timer: Receiver<Instant>,
-    rx: Receiver<LedStateChange>,
-) -> Result<thread::JoinHandle<()>> {
-    thread::Builder::new()
-        .name("led".to_string())
-        .spawn(move || {
-            let mut strategies = ledstrategy::LedStrategies::all_off(&mut *rpi);
-
-            loop {
-                select! {
-                    recv(rx_timer) -> timer_result => {
-                        if let Ok(instant) = timer_result {
-                            strategies.tick(instant, &mut *rpi);
-                        } else {
-                            error!("rx_timer disconnect on LED thread");
-                            break
-                        }
-                    },
-                    recv(rx) -> rx_result => {
-                        if let Ok(state_change) = rx_result {
-                            strategies.update(&mut *rpi, state_change.led, state_change.state);
-                        } else {
-                            info!("rx disconnect on LED thread");
-                            break
-                        }
-                    },
-                }
-            }
-        })
-        .context("Failed to start LED thread")
-}
-
-fn main_loop(
-    db: &AppDb,
-    scheduler: &mut Scheduler,
-    rx_timer: &Receiver<Instant>,
-    rx_input: &Receiver<Result<Button>>,
-    tx_led: &Sender<LedStateChange>,
-    email: &Email,
-) -> Result<()> {
-    let mut application_state = db
+    let application_state = db
         .load_application_state()
         .context("Failed to load application state")?
         .unwrap_or(ApplicationState {
@@ -136,208 +71,16 @@ fn main_loop(
             i_pending: None,
         });
     info!("Loaded state {:?}", application_state);
-    // TODO De-duplicate with the logic in the main loop!!
-    // TODO Try to write some tests for this main logic?
-    if application_state.take_pills_pending.is_some() {
-        tx_led
-            .send(LedStateChange {
-                led: Led::L1,
-                state: LedState::On,
-            })
-            .context("Failed to send LedStateChange to tx_led")?;
-    }
-    if application_state.water_plants_pending.is_some() {
-        tx_led
-            .send(LedStateChange {
-                led: Led::L4,
-                state: LedState::On,
-            })
-            .context("Failed to send LedStateChange to tx_led")?;
-    }
-    if application_state.i_pending.is_some() {
-        tx_led
-            .send(LedStateChange {
-                led: Led::L3,
-                state: LedState::On,
-            })
-            .context("Failed to send LedStateChange to tx_led")?;
-    }
 
-    loop {
-        select! {
-            recv(rx_timer) -> instant_result => {
-                match instant_result {
-                    Ok(_) => {
-                        main_loop_tick(scheduler, &mut application_state, tx_led, db, email)?;
-                    }
-                    Err(err) => {
-                        info!("scheduler disconnected ({}), shutting down", err);
-                        break
-                    }
-                }
-            },
-            recv(rx_input) -> input_result => {
-                match input_result {
-                    Ok(input) => {
-                        // TODO This looks terrible!  Better with proper actors.
-                        let button = input.context("Input error on rx_input")?;
-                        if !main_loop_on_btn_input(button, &mut application_state, tx_led, db)? {
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        info!("rx_input disconnected ({}), shutting down", err);
-                        break
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn main_loop_tick(
-    scheduler: &mut Scheduler,
-    application_state: &mut ApplicationState,
-    tx_led: &Sender<LedStateChange>,
-    db: &AppDb,
-    email: &Email,
-) -> Result<()> {
-    let now = Utc::now().naive_local();
-    for activity in scheduler.tick(now) {
-        info!("Activity triggered: {:?}", activity);
-
-        match activity {
-            activity::Activity::TakePills => {
-                application_state.take_pills_pending = Some(now);
-                tx_led
-                    .send(LedStateChange {
-                        led: Led::L1,
-                        state: LedState::On,
-                    })
-                    .context("Failed to send LedStateChange on tx_led")?;
-                db.update_application_state(application_state)
-                    .context("Failed to update application state")?;
-            }
-            activity::Activity::WaterPlants => {
-                application_state.water_plants_pending = Some(now);
-                tx_led
-                    .send(LedStateChange {
-                        led: Led::L4,
-                        state: LedState::On,
-                    })
-                    .context("Failed to send LedStateChange on tx_led")?;
-                db.update_application_state(application_state)
-                    .context("Failed to update application state")?;
-            }
-            activity::Activity::I => {
-                application_state.i_pending = Some(now);
-                tx_led
-                    .send(LedStateChange {
-                        led: Led::L3,
-                        state: LedState::On,
-                    })
-                    .context("Failed to send LedStateChange on tx_led")?;
-                db.update_application_state(application_state)
-                    .context("Failed to update application state")?;
-            }
-            activity::Activity::TakePillsReminder => {
-                if application_state.take_pills_pending.is_some() {
-                    // It's still pending!  Time to complain further
-                    if let Err(err) = email.send("Did you forget to take your pills you fool") {
-                        error!("Failed to send email {:?}", err);
-                    }
-                }
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn main_loop_on_btn_input(
-    button: Button,
-    application_state: &mut ApplicationState,
-    tx_led: &Sender<LedStateChange>,
-    db: &AppDb,
-) -> Result<bool> {
-    info!("Saw button press {:?}", button);
-    // Whichever button is pressed, flash it
-    // Sent any pending application state to not pending
-    let led = match button {
-        Button::B1 => Led::L1,
-        Button::B2 => Led::L2,
-        Button::B3 => Led::L3,
-        Button::B4 => Led::L4,
-        Button::Stop => {
-            return Ok(false);
-        }
-    };
-
-    // Important to do this first otherwise it feels laggy
-    // (the db.insert_reading function called later is
-    // blocking).
-    tx_led
-        .send(LedStateChange {
-            led,
-            state: LedState::BlinkTemporary,
-        })
-        .context("Failed to send LedStateChange to tx_led")?;
-
-    match button {
-        Button::B1 => {
-            application_state.take_pills_pending = None;
-        }
-        Button::B2 | Button::Stop => {}
-        Button::B3 => {
-            application_state.i_pending = None;
-        }
-        Button::B4 => {
-            application_state.water_plants_pending = None;
-        }
-    };
-
-    db.update_application_state(application_state)
-        .context("Failed to update application state")?;
-
-    Ok(true)
-}
-
-fn main() {
-    env_logger::init();
-    info!("Initialising");
-    let db = AppDb::new("./db".to_string());
-    let mailgun_api_key = fs::read_to_string("./mailgun-apikey").expect("Missing mailgun-apikey");
-    let to_address = fs::read_to_string("./to-address").expect("Missing to-address");
-    let email = Email::new(
-        mailgun_api_key.trim().to_owned(),
-        to_address.trim().to_owned(),
-    );
-
-    db.run_migrations().expect("Failed to run migrations");
-
-    let rpi = initialise_rpi().expect("Failed to initialise rpi");
-
-    let rx_input = {
-        let (tx, rx) = unbounded::<Result<Button>>();
-        spawn_rppal_thread(rpi.input, tx).expect("Failed to spawn rppal thread");
-        rx
-    };
-    let tx_led = {
-        let (tx, rx) = unbounded::<LedStateChange>();
-        spawn_led_thread(rpi.output, tick(std::time::Duration::from_millis(10)), rx)
-            .expect("Failed to spawn led thread");
-        tx
-    };
+    let rpi = initialise_rpi().context("Failed to initialise rpi")?;
 
     let now = Local::now().naive_local();
-    let mut scheduler = Scheduler::new(
+    let scheduler = Scheduler::new(
         now,
         &[
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
-                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
+                    NaiveTime::from_hms_milli_opt(6, 0, 0, 0).context("Invalid schedule")?,
                     every_day(),
                 )),
                 Activity::TakePills,
@@ -371,14 +114,53 @@ fn main() {
         ],
     );
 
-    info!("Entering main loop");
-    main_loop(
-        &db,
-        &mut scheduler,
-        &tick(std::time::Duration::from_millis(1000)),
-        &rx_input,
-        &tx_led,
-        &email,
-    )
-    .expect("Failed to run main loop");
+    Ok((db, email, application_state, rpi, scheduler))
+}
+
+fn run_actors(
+    rpi: rpi::Rpi,
+    application_state: ApplicationState,
+    db: AppDb,
+    email: Email,
+    scheduler: Scheduler,
+) -> Result<()> {
+    let led_actor =
+        ActorHandle::new(LedActor::new(rpi.output)).context("Failed to start LED Actor")?;
+    let led_tick_actor = SourceActorHandle::new(TickActor::new(
+        std::time::Duration::from_millis(10),
+        led_actor.sender.clone(),
+        |instant: Instant| LedActorMessage::Tick(instant),
+    ))
+    .context("Failed to start LED Tick Actor")?;
+
+    let control_actor = ActorHandle::new(ControlActor::new(
+        led_actor.sender,
+        application_state,
+        db,
+        email,
+    ))
+    .context("Failed to start Control Actor")?;
+
+    let rpi_input_actor =
+        SourceActorHandle::new(RpiInputActor::new(rpi.input, control_actor.sender.clone()))
+            .context("Failed to start RPI Input Actor")?;
+
+    let scheduler_actor = ActorHandle::new(SchedulerActor::new(scheduler, control_actor.sender))
+        .context("Failed to start Scheduler Actor")?;
+    let scheduler_tick_actor = SourceActorHandle::new(TickActor::new(
+        std::time::Duration::from_millis(1000),
+        scheduler_actor.sender,
+        |_| SchedulerActorMessage::Tick,
+    ))
+    .context("Failed to start Scheduler Tick Actor")?;
+
+    // TODO Implement a proper supervisor
+    control_actor.join_handle.join().unwrap().unwrap();
+    rpi_input_actor.join_handle.join().unwrap().unwrap();
+    led_actor.join_handle.join().unwrap().unwrap();
+    led_tick_actor.join_handle.join().unwrap().unwrap();
+    scheduler_actor.join_handle.join().unwrap().unwrap();
+    scheduler_tick_actor.join_handle.join().unwrap().unwrap();
+
+    Ok(())
 }

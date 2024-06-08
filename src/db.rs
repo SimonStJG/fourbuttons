@@ -40,7 +40,7 @@ pub(crate) struct Migration<'a> {
 }
 
 pub(crate) struct Db {
-    file_path: Box<dyn DbFilePath>,
+    file_path: Box<dyn DbFilePath + Send + Sync + 'static>,
 }
 
 impl Db {

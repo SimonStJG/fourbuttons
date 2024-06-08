@@ -2,8 +2,8 @@ use anyhow::{Context, Result};
 use rusqlite::OptionalExtension;
 
 use crate::{
+    application_state::ApplicationState,
     db::{fmt_naivedatetime_for_sqlite, parse_naivedatetime_from_sqlite, Db, Migration},
-    ApplicationState,
 };
 
 pub(crate) const MIGRATIONS: &[Migration] = &[
