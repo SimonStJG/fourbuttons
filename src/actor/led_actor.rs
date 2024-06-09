@@ -6,6 +6,7 @@ use crate::{
 use anyhow::Result;
 use std::time::Instant;
 
+#[derive(PartialEq, PartialOrd, Debug)]
 pub(crate) enum LedActorMessage {
     Tick(Instant),
     StateChange { led: Led, state: LedState },

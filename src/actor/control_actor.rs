@@ -8,7 +8,7 @@ use crate::{
     activity,
     appdb::AppDb,
     application_state::ApplicationState,
-    email::Email,
+    email::Emailer,
     ledstrategy::LedState,
     rpi::{Button, Led},
     Activity,
@@ -21,19 +21,25 @@ pub(crate) enum ControlActorMessage {
     ButtonPress(Button),
 }
 
-pub(crate) struct ControlActor {
+pub(crate) struct ControlActor<TEmail>
+where
+    TEmail: Emailer,
+{
     tx_led: Sender<LedActorMessage>,
     application_state: ApplicationState,
     db: AppDb,
-    email: Email,
+    email: TEmail,
 }
 
-impl ControlActor {
+impl<TEmail> ControlActor<TEmail>
+where
+    TEmail: Emailer,
+{
     pub(crate) fn new(
         tx_led: Sender<LedActorMessage>,
         application_state: ApplicationState,
         db: AppDb,
-        email: Email,
+        email: TEmail,
     ) -> Self {
         Self {
             tx_led,
@@ -128,7 +134,10 @@ impl ControlActor {
     }
 }
 
-impl Actor<ControlActorMessage> for ControlActor {
+impl<TEmail> Actor<ControlActorMessage> for ControlActor<TEmail>
+where
+    TEmail: Emailer,
+{
     fn startup(&mut self) -> anyhow::Result<()> {
         if self.application_state.take_pills_pending.is_some() {
             self.send_led_state_change(Led::L1, LedState::On)?;
@@ -151,5 +160,54 @@ impl Actor<ControlActorMessage> for ControlActor {
             }
             ControlActorMessage::ButtonPress(button) => self.handle_button_press(button),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::mpsc;
+
+    use chrono::Local;
+
+    use crate::{
+        actor::led_actor::LedActorMessage, appdb::AppDb, application_state::ApplicationState,
+        email::Emailer, ledstrategy::LedState, rpi::Led,
+    };
+
+    use super::ControlActor;
+
+    struct FakeEmail {}
+
+    impl Emailer for FakeEmail {
+        fn send(&self, _: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_take_pills_activity() {
+        let (tx_led, rx_led) = mpsc::channel::<LedActorMessage>();
+        let application_state = ApplicationState {
+            take_pills_pending: None,
+            water_plants_pending: None,
+            i_pending: None,
+        };
+        let db = AppDb::new_tmp();
+        db.run_migrations().unwrap();
+        let email = FakeEmail {};
+
+        let mut actor = ControlActor::new(tx_led, application_state, db, email);
+        let now = Local::now().naive_local();
+        actor
+            .handle_activity(crate::activity::Activity::TakePills, now)
+            .unwrap();
+
+        assert_eq!(
+            rx_led.recv().unwrap(),
+            LedActorMessage::StateChange {
+                led: Led::L1,
+                state: LedState::On
+            }
+        );
     }
 }

@@ -2,6 +2,10 @@ use anyhow::{Context, Result};
 use curl::easy::{Auth, Easy, Form};
 use log::info;
 
+pub(crate) trait Emailer {
+    fn send(&self, message: &str) -> Result<()>;
+}
+
 pub(crate) struct Email {
     apikey: String,
     to: String,
@@ -11,8 +15,10 @@ impl Email {
     pub(crate) fn new(apikey: String, to: String) -> Self {
         Self { apikey, to }
     }
+}
 
-    pub(crate) fn send(&self, message: &str) -> Result<()> {
+impl Emailer for Email {
+    fn send(&self, message: &str) -> Result<()> {
         let mut easy = Easy::new();
         let mut form = Form::new();
         form.part("from")
@@ -61,7 +67,7 @@ impl Email {
 mod tests {
     use std::fs;
 
-    use super::Email;
+    use super::{Email, Emailer};
 
     #[ignore]
     #[test]

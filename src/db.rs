@@ -167,7 +167,8 @@ pub(crate) mod testhelper {
 
     impl Drop for TmpFile {
         fn drop(&mut self) {
-            std::fs::remove_file(&self.path).unwrap();
+            // TODO
+            let _ = std::fs::remove_file(&self.path);
         }
     }
 

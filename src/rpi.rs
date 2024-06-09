@@ -31,7 +31,7 @@ pub(crate) enum Button {
     Stop,
 }
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Copy, Clone)]
 pub(crate) enum Led {
     L1,
     L2,

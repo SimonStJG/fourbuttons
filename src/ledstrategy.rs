@@ -3,7 +3,7 @@ use crate::rpi::RpiOutput;
 use std::time::Duration;
 use std::time::Instant;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, Eq, PartialEq, PartialOrd, Copy, Clone)]
 #[allow(unused)]
 pub(crate) enum LedState {
     On,

@@ -72,14 +72,14 @@ impl Supervisor {
             Some(join_handle) => match join_handle.join() {
                 Ok(join_result) => match join_result {
                     Ok(()) => {
-                        info!("Actor clean shutdown: {:?}", actor_id);
+                        info!("Actor shutdown: {:?}", actor_id);
                     }
                     Err(err) => {
                         error!("Error in actor: {:?} {:?}", actor_id, err);
                     }
                 },
                 Err(err) => {
-                    error!("Error joining actor {:?} {:?}", actor_id, err);
+                    error!("Actor {:?} panicked {:?}", actor_id, err);
                 }
             },
             None => {
@@ -91,7 +91,8 @@ impl Supervisor {
             }
         }
 
-        // Could be cleverer here, but for now let's just exit
+        // Could be cleverer here, for example I could try to
+        // shutdown the other actors cleanly, but for now let's just exit
         true
     }
 
