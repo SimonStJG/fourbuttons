@@ -42,9 +42,8 @@ Some things I could do?  But who has the time.
 * Tidy up my half-baked DIY actor framework!
  * Actually test it, write some tests
  * Cleanly shutdown the other actors when one dies
- * Handle sigterm and shutdown cleanly
+ * Handle sigterm and shutdown cleanly (this looks cute for the blocking syscalls? https://mazzo.li/posts/stopping-linux-threads.html#homegrown-thread-cancellation)
 * Test the core notification logic now it isn't all tied up with threads.
-* Devcontainer with pinned rust version, clippy version, etc
 * Store scheduler state in DB.
 * Create a proper config class / don't store all the secrets in separate text files
 

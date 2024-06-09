@@ -2,8 +2,6 @@ use crate::{activity::Activity, schedule::Schedule};
 use chrono::{Duration, NaiveDateTime};
 use log::info;
 
-// TODO Save scheduler state into the DB too
-
 pub(crate) struct Scheduler {
     jobs: Vec<Job>,
 }
@@ -33,9 +31,6 @@ impl Scheduler {
                 );
 
                 Job {
-                    // TODO I still don't really have a good feel for when to use this clone?
-                    // Perhaps actually it's because the whole use of Vec is unnecessary for the schedule?
-                    // Could I use a bitfield?
                     schedule: spec.schedule.clone(),
                     activity: spec.activity,
                     grace_period: spec.grace_period,

@@ -18,11 +18,9 @@ pub(crate) struct LedActor {
 }
 
 impl LedActor {
-    pub(crate) fn new(rpi: Box<dyn RpiOutput + Send>) -> LedActor {
-        Self {
-            rpi,
-            strategies: ledstrategy::LedStrategies::all_off(),
-        }
+    pub(crate) fn new(mut rpi: Box<dyn RpiOutput + Send>) -> LedActor {
+        let strategies = ledstrategy::LedStrategies::all_off(&mut *rpi);
+        Self { rpi, strategies }
     }
 }
 
@@ -41,7 +39,6 @@ impl Actor<LedActorMessage> for LedActor {
     }
 
     fn startup(&mut self) -> Result<()> {
-        self.strategies.initialise(&mut *self.rpi);
         Ok(())
     }
 }
