@@ -62,11 +62,7 @@ fn initialise() -> Result<(AppDb, Email, ApplicationState, rpi::Rpi, Scheduler)>
     let application_state = db
         .load_application_state()
         .context("Failed to load application state")?
-        .unwrap_or(ApplicationState {
-            take_pills_pending: None,
-            water_plants_pending: None,
-            i_pending: None,
-        });
+        .unwrap_or(ApplicationState::blank());
     info!("Loaded state {:?}", application_state);
 
     let rpi = initialise_rpi().context("Failed to initialise rpi")?;

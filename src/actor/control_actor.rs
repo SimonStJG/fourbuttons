@@ -187,11 +187,7 @@ mod tests {
     #[test]
     fn test_take_pills_activity() {
         let (tx_led, rx_led) = mpsc::channel::<LedActorMessage>();
-        let application_state = ApplicationState {
-            take_pills_pending: None,
-            water_plants_pending: None,
-            i_pending: None,
-        };
+        let application_state = ApplicationState::blank();
         let db = AppDb::new_tmp();
         db.run_migrations().unwrap();
         let email = FakeEmail {};

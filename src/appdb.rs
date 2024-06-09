@@ -150,11 +150,7 @@ mod tests {
         let appdb = AppDb::new_tmp();
         appdb.run_migrations().unwrap();
 
-        let state = ApplicationState {
-            take_pills_pending: None,
-            water_plants_pending: None,
-            i_pending: None,
-        };
+        let state = ApplicationState::blank();
         appdb.update_application_state(&state).unwrap();
 
         assert_eq!(appdb.load_application_state().unwrap().unwrap(), state);
