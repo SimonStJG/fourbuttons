@@ -165,16 +165,26 @@ where
 
 #[cfg(test)]
 mod tests {
-    use std::sync::mpsc;
+    use std::{
+        str::FromStr,
+        sync::mpsc,
+        time::{self, Duration},
+    };
 
-    use chrono::Local;
+    use chrono::NaiveDateTime;
 
     use crate::{
-        actor::led_actor::LedActorMessage, appdb::AppDb, application_state::ApplicationState,
-        email::Emailer, ledstrategy::LedState, rpi::Led,
+        actor::{actor::Actor, control_actor::ControlActorMessage, led_actor::LedActorMessage},
+        appdb::AppDb,
+        application_state::ApplicationState,
+        email::Emailer,
+        ledstrategy::LedState,
+        rpi::{Button, Led},
     };
 
     use super::ControlActor;
+
+    const RECV_TIMEOUT: time::Duration = Duration::from_millis(10);
 
     struct FakeEmail {}
 
@@ -184,26 +194,80 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_take_pills_activity() {
+    fn control_actor() -> (ControlActor<FakeEmail>, mpsc::Receiver<LedActorMessage>) {
         let (tx_led, rx_led) = mpsc::channel::<LedActorMessage>();
         let application_state = ApplicationState::blank();
         let db = AppDb::new_tmp();
         db.run_migrations().unwrap();
         let email = FakeEmail {};
 
-        let mut actor = ControlActor::new(tx_led, application_state, db, email);
-        let now = Local::now().naive_local();
+        (
+            ControlActor::new(tx_led, application_state, db, email),
+            rx_led,
+        )
+    }
+
+    #[test]
+    fn test_take_pills_activity() {
+        let (mut actor, rx_led) = control_actor();
+
+        let now = NaiveDateTime::from_str("2020-01-01T09:00:00").unwrap();
         actor
-            .handle_activity(crate::activity::Activity::TakePills, now)
+            .handle_message(ControlActorMessage::Activity(
+                crate::activity::Activity::TakePills,
+                now,
+            ))
             .unwrap();
 
         assert_eq!(
-            rx_led.recv().unwrap(),
+            rx_led.recv_timeout(RECV_TIMEOUT).unwrap(),
             LedActorMessage::StateChange {
                 led: Led::L1,
                 state: LedState::On
             }
         );
+        assert_eq!(
+            actor.db.load_application_state().unwrap(),
+            Some(ApplicationState {
+                take_pills_pending: Some(now),
+                water_plants_pending: None,
+                i_pending: None
+            })
+        )
+    }
+
+    #[test]
+    fn test_take_pills_resolution() {
+        let (mut actor, rx_led) = control_actor();
+
+        let now = NaiveDateTime::from_str("2020-01-01T09:00:00").unwrap();
+        actor
+            .handle_message(ControlActorMessage::Activity(
+                crate::activity::Activity::TakePills,
+                now,
+            ))
+            .unwrap();
+        actor
+            .handle_message(ControlActorMessage::ButtonPress(Button::B1))
+            .unwrap();
+
+        assert_eq!(
+            rx_led.recv_timeout(RECV_TIMEOUT).unwrap(),
+            LedActorMessage::StateChange {
+                led: Led::L1,
+                state: LedState::On
+            }
+        );
+        assert_eq!(
+            rx_led.recv_timeout(RECV_TIMEOUT).unwrap(),
+            LedActorMessage::StateChange {
+                led: Led::L1,
+                state: LedState::BlinkTemporary
+            }
+        );
+        assert_eq!(
+            actor.db.load_application_state().unwrap(),
+            Some(ApplicationState::blank())
+        )
     }
 }
