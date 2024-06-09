@@ -167,8 +167,8 @@ where
 mod tests {
     use std::{
         str::FromStr,
-        sync::mpsc,
-        time::{self, Duration},
+        sync::mpsc::{self, Receiver, TryRecvError},
+        time::Duration,
     };
 
     use chrono::NaiveDateTime;
@@ -183,8 +183,6 @@ mod tests {
     };
 
     use super::ControlActor;
-
-    const RECV_TIMEOUT: time::Duration = Duration::from_millis(10);
 
     struct FakeEmail {}
 
@@ -207,6 +205,19 @@ mod tests {
         )
     }
 
+    fn expect_messages(
+        rx_led: &Receiver<LedActorMessage>,
+        num_messages: u32,
+    ) -> Vec<LedActorMessage> {
+        let mut messages = Vec::new();
+        for _ in 0..num_messages {
+            messages.push(rx_led.recv_timeout(Duration::from_millis(10)).unwrap());
+        }
+        assert_eq!(rx_led.try_recv(), Err(TryRecvError::Empty));
+
+        messages
+    }
+
     #[test]
     fn test_take_pills_activity() {
         let (mut actor, rx_led) = control_actor();
@@ -220,12 +231,13 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            rx_led.recv_timeout(RECV_TIMEOUT).unwrap(),
-            LedActorMessage::StateChange {
+            expect_messages(&rx_led, 1),
+            vec![LedActorMessage::StateChange {
                 led: Led::L1,
                 state: LedState::On
-            }
+            }]
         );
+
         assert_eq!(
             actor.db.load_application_state().unwrap(),
             Some(ApplicationState {
@@ -233,7 +245,7 @@ mod tests {
                 water_plants_pending: None,
                 i_pending: None
             })
-        )
+        );
     }
 
     #[test]
@@ -252,22 +264,22 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            rx_led.recv_timeout(RECV_TIMEOUT).unwrap(),
-            LedActorMessage::StateChange {
-                led: Led::L1,
-                state: LedState::On
-            }
+            expect_messages(&rx_led, 2),
+            vec![
+                LedActorMessage::StateChange {
+                    led: Led::L1,
+                    state: LedState::On
+                },
+                LedActorMessage::StateChange {
+                    led: Led::L1,
+                    state: LedState::BlinkTemporary
+                }
+            ]
         );
-        assert_eq!(
-            rx_led.recv_timeout(RECV_TIMEOUT).unwrap(),
-            LedActorMessage::StateChange {
-                led: Led::L1,
-                state: LedState::BlinkTemporary
-            }
-        );
+
         assert_eq!(
             actor.db.load_application_state().unwrap(),
             Some(ApplicationState::blank())
-        )
+        );
     }
 }
