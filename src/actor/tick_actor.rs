@@ -4,7 +4,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::actor::source_actor::SourceActor;
+use crate::actor::message_source::MessageSource;
 
 pub(crate) struct TickActor<T> {
     duration: Duration,
@@ -26,15 +26,14 @@ impl<T> TickActor<T> {
     }
 }
 
-impl<T> SourceActor for TickActor<T>
+impl<T> MessageSource for TickActor<T>
 where
     T: Send + Sync + 'static,
 {
-    fn tick(&mut self) -> anyhow::Result<()> {
-        // TODO Make a better impl
+    fn run(&mut self) -> anyhow::Result<bool> {
         thread::sleep(self.duration);
         self.tx.send((self.message_builder)(Instant::now()))?;
 
-        Ok(())
+        Ok(false)
     }
 }

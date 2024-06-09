@@ -39,9 +39,7 @@ Manually reserved 192.168.0.94 on the router.
 ## TODO
 
 Some things I could do?  But who has the time.
-* Tidy up my half-baked DIY actor framework!  
-  * Don't panic when stopping locally
-  * check what happens when we get SIGTERM, etc..
+* Tidy up my half-baked DIY actor framework!  (Actually test it, write some tests, ?handle sigterm)
 * Test the core notification logic now it isn't all tied up with threads.
 * Devcontainer with pinned rust version, clippy version, etc
 * Store scheduler state in DB.

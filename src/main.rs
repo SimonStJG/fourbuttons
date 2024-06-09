@@ -1,9 +1,6 @@
 #![deny(warnings)]
 #![deny(clippy::all)]
 #![deny(clippy::pedantic)]
-// TODO Fix these
-#![allow(clippy::module_name_repetitions)]
-#![allow(clippy::module_inception)]
 
 mod activity;
 mod actor;
@@ -15,6 +12,7 @@ mod ledstrategy;
 mod rpi;
 mod schedule;
 mod scheduler;
+mod supervisor;
 
 use anyhow::{Context, Result};
 use appdb::AppDb;
@@ -23,16 +21,15 @@ use log::info;
 use rpi::initialise_rpi;
 use scheduler::Scheduler;
 use std::{fs, str::FromStr, time::Instant};
+use supervisor::supervisor::Supervisor;
 
 use crate::{
     activity::Activity,
     actor::{
-        actor::ActorHandle,
         control_actor::ControlActor,
         led_actor::{LedActor, LedActorMessage},
         rpi_input_actor::RpiInputActor,
         scheduler_actor::{SchedulerActor, SchedulerActorMessage},
-        source_actor::SourceActorHandle,
         tick_actor::TickActor,
     },
     application_state::ApplicationState,
@@ -124,43 +121,53 @@ fn run_actors(
     email: Email,
     scheduler: Scheduler,
 ) -> Result<()> {
-    let led_actor =
-        ActorHandle::new(LedActor::new(rpi.output)).context("Failed to start LED Actor")?;
-    let led_tick_actor = SourceActorHandle::new(TickActor::new(
-        std::time::Duration::from_millis(10),
-        led_actor.sender.clone(),
-        |instant: Instant| LedActorMessage::Tick(instant),
-    ))
-    .context("Failed to start LED Tick Actor")?;
+    let mut supervisor = Supervisor::new();
 
-    let control_actor = ActorHandle::new(ControlActor::new(
-        led_actor.sender,
-        application_state,
-        db,
-        email,
-    ))
-    .context("Failed to start Control Actor")?;
+    let tx_led = supervisor
+        .start(LedActor::new(rpi.output), "LEDActor".to_owned())
+        .context("Failed to start LED Actor")?;
 
-    let rpi_input_actor =
-        SourceActorHandle::new(RpiInputActor::new(rpi.input, control_actor.sender.clone()))
-            .context("Failed to start RPI Input Actor")?;
+    supervisor
+        .start_message_source(
+            TickActor::new(
+                std::time::Duration::from_millis(10),
+                tx_led.clone(),
+                |instant: Instant| LedActorMessage::Tick(instant),
+            ),
+            "LED Tick Actor".to_owned(),
+        )
+        .context("Failed to start LED Tick Actor")?;
 
-    let scheduler_actor = ActorHandle::new(SchedulerActor::new(scheduler, control_actor.sender))
+    let tx_control = supervisor
+        .start(
+            ControlActor::new(tx_led, application_state, db, email),
+            "ControlActor".to_owned(),
+        )
+        .context("Failed to start Control Actor")?;
+
+    supervisor
+        .start_message_source(
+            RpiInputActor::new(rpi.input, tx_control.clone()),
+            "RPI Input Actor".to_owned(),
+        )
+        .context("Failed to start RPI Input Actor")?;
+
+    let tx_scheduler = supervisor
+        .start(
+            SchedulerActor::new(scheduler, tx_control),
+            "SchedulerActor".to_owned(),
+        )
         .context("Failed to start Scheduler Actor")?;
-    let scheduler_tick_actor = SourceActorHandle::new(TickActor::new(
-        std::time::Duration::from_millis(1000),
-        scheduler_actor.sender,
-        |_| SchedulerActorMessage::Tick,
-    ))
-    .context("Failed to start Scheduler Tick Actor")?;
+    supervisor
+        .start_message_source(
+            TickActor::new(std::time::Duration::from_millis(1000), tx_scheduler, |_| {
+                SchedulerActorMessage::Tick
+            }),
+            "Scheduler Tick Actor".to_owned(),
+        )
+        .context("Failed to start Scheduler Tick Actor")?;
 
-    // TODO Implement a proper supervisor
-    control_actor.join_handle.join().unwrap().unwrap();
-    rpi_input_actor.join_handle.join().unwrap().unwrap();
-    led_actor.join_handle.join().unwrap().unwrap();
-    led_tick_actor.join_handle.join().unwrap().unwrap();
-    scheduler_actor.join_handle.join().unwrap().unwrap();
-    scheduler_tick_actor.join_handle.join().unwrap().unwrap();
+    supervisor.supervise();
 
     Ok(())
 }

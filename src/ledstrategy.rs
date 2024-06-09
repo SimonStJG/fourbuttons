@@ -16,7 +16,7 @@ pub(crate) trait LedStrategy {
 }
 
 pub(crate) struct LedStrategies {
-    // TODO Shouldn't really need Send here, could construct stuff like this in the thread?
+    // TODO Think about if I want send here, or if I could construct this in the actor
     pub(crate) l1: Box<dyn LedStrategy + Send>,
     pub(crate) l2: Box<dyn LedStrategy + Send>,
     pub(crate) l3: Box<dyn LedStrategy + Send>,
@@ -33,7 +33,7 @@ impl LedStrategies {
         }
     }
 
-    // TODO
+    // TODO This separate method feels a bit messy, ditto the clippy warning
     #[allow(clippy::unused_self)]
     pub(crate) fn initialise(&self, rpi: &mut dyn RpiOutput) {
         rpi.switch_led(Led::L1, false);
@@ -50,7 +50,7 @@ impl LedStrategies {
     }
 
     pub(crate) fn update(&mut self, rpi: &mut dyn RpiOutput, led: Led, led_state: LedState) {
-        // TODO Shouldn't need Send
+        // TODO Think about if I want send here, or if I could construct this in the actor
         let new_state: Box<dyn LedStrategy + Send> = match led_state {
             LedState::On => Box::new(LedStrategyOn::new(led, &mut *rpi)),
             LedState::Off => Box::new(LedStrategyOff::new(led, &mut *rpi)),

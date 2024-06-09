@@ -82,7 +82,7 @@ impl ControlActor {
         Ok(())
     }
 
-    fn handle_button_press(&mut self, button: Button) -> Result<()> {
+    fn handle_button_press(&mut self, button: Button) -> Result<bool> {
         info!("Saw button press {:?}", button);
         // Whichever button is pressed, flash it
         // Sent any pending application state to not pending
@@ -91,9 +91,7 @@ impl ControlActor {
             Button::B2 => Led::L2,
             Button::B3 => Led::L3,
             Button::B4 => Led::L4,
-            Button::Stop => {
-                todo!("TODO Handle stop");
-            }
+            Button::Stop => return Ok(true),
         };
 
         // Important to do this first otherwise it feels laggy
@@ -118,7 +116,7 @@ impl ControlActor {
             .update_application_state(&self.application_state)
             .context("Failed to update application state")?;
 
-        Ok(())
+        Ok(false)
     }
 
     fn send_led_state_change(&self, led: Led, state: LedState) -> Result<()> {
@@ -145,9 +143,12 @@ impl Actor<ControlActorMessage> for ControlActor {
         Ok(())
     }
 
-    fn handle_message(&mut self, msg: ControlActorMessage) -> anyhow::Result<()> {
+    fn handle_message(&mut self, msg: ControlActorMessage) -> anyhow::Result<bool> {
         match msg {
-            ControlActorMessage::Activity(activity, now) => self.handle_activity(activity, now),
+            ControlActorMessage::Activity(activity, now) => {
+                self.handle_activity(activity, now)?;
+                Ok(false)
+            }
             ControlActorMessage::ButtonPress(button) => self.handle_button_press(button),
         }
     }

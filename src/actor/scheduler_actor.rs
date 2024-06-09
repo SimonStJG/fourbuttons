@@ -30,7 +30,7 @@ impl Actor<SchedulerActorMessage> for SchedulerActor {
         Ok(())
     }
 
-    fn handle_message(&mut self, _: SchedulerActorMessage) -> anyhow::Result<()> {
+    fn handle_message(&mut self, _: SchedulerActorMessage) -> anyhow::Result<bool> {
         let now = Local::now().naive_local();
         for activity in self.scheduler.tick(now) {
             info!("Activity triggered: {:?}", activity);
@@ -38,6 +38,6 @@ impl Actor<SchedulerActorMessage> for SchedulerActor {
                 .send(ControlActorMessage::Activity(activity, now))?;
         }
 
-        Ok(())
+        Ok(false)
     }
 }

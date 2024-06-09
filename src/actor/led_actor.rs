@@ -26,7 +26,7 @@ impl LedActor {
 }
 
 impl Actor<LedActorMessage> for LedActor {
-    fn handle_message(&mut self, msg: LedActorMessage) -> anyhow::Result<()> {
+    fn handle_message(&mut self, msg: LedActorMessage) -> anyhow::Result<bool> {
         match msg {
             LedActorMessage::Tick(instant) => {
                 self.strategies.tick(instant, &mut *self.rpi);
@@ -34,8 +34,9 @@ impl Actor<LedActorMessage> for LedActor {
             LedActorMessage::StateChange { led, state } => {
                 self.strategies.update(&mut *self.rpi, led, state);
             }
-        }
-        Ok(())
+        };
+
+        Ok(false)
     }
 
     fn startup(&mut self) -> Result<()> {
