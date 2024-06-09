@@ -147,6 +147,7 @@ pub(crate) fn fmt_naivedatetime_for_sqlite(datetime: &NaiveDateTime) -> String {
 pub(crate) mod testhelper {
 
     use std::fmt::Write;
+    use std::fs;
     use std::{env, fs::File, io::Read};
 
     use super::{Db, DbFilePath};
@@ -167,8 +168,7 @@ pub(crate) mod testhelper {
 
     impl Drop for TmpFile {
         fn drop(&mut self) {
-            // TODO
-            let _ = std::fs::remove_file(&self.path);
+            let _ = fs::remove_file(&self.path);
         }
     }
 
@@ -178,11 +178,10 @@ pub(crate) mod testhelper {
         }
     }
 
-    // A lazy random file name generator (seems all the useful random number
-    // generators are in crates?)
     fn tmp_file_name() -> String {
+        // A lazy random file name generator
         let mut rng = File::open("/dev/urandom").unwrap();
-        let mut buffer = [0u8; 1];
+        let mut buffer = [0u8; 4];
         rng.read_exact(&mut buffer).unwrap();
         let mut s: String = String::new();
         for b in &buffer {
