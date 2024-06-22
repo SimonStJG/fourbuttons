@@ -90,7 +90,7 @@ fn initialise() -> Result<(AppDb, Email, ApplicationState, rpi::Rpi, Scheduler)>
             ScheduledJobSpec::new(
                 Schedule::Daily(DailySchedule::new(
                     NaiveTime::from_hms_milli_opt(6, 0, 0, 0).expect("Invalid schedule"),
-                    vec![Weekday::Sat],
+                    vec![Weekday::Sat, Weekday::Wed],
                 )),
                 Activity::WaterPlants,
                 Duration::hours(1),
