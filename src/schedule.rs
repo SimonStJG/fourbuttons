@@ -21,7 +21,9 @@ pub(crate) enum Schedule {
 }
 
 impl DailySchedule {
-    pub(crate) fn new(schedule_time: NaiveTime, schedule_days: Vec<Weekday>) -> Self {
+    pub(crate) fn new(schedule_time: NaiveTime, mut schedule_days: Vec<Weekday>) -> Self {
+        // calculate_next_trigger needs schedule_days to be in order
+        schedule_days.sort_by_key(Weekday::number_from_monday);
         Self {
             time: schedule_time,
             days: schedule_days,
@@ -31,6 +33,7 @@ impl DailySchedule {
     fn calculate_next_trigger(&self, now: NaiveDateTime) -> NaiveDateTime {
         let num_days_from_monday = now.weekday().num_days_from_monday();
 
+        // Assumes self.days is in order
         let next_weekday = if now.time() < self.time {
             self.days
                 .iter()
@@ -41,7 +44,7 @@ impl DailySchedule {
                 .find(|day| num_days_from_monday < day.num_days_from_monday())
         }
         // Safe to unwrap because we really do know the schedule_days
-        // is always non-empty
+        // is always non-empty.
         .unwrap_or(self.days.first().unwrap());
 
         // All of this unwrapping looks awful, but I don't see a cleaner way to do it?
@@ -225,6 +228,21 @@ mod tests {
         assert_eq!(
             schedule.calculate_next_trigger(now),
             NaiveDateTime::from_str("2020-01-07T10:00:00").unwrap()
+        );
+    }
+
+    #[test]
+    fn test_daily_schedule_days_out_of_order() {
+        let now = NaiveDateTime::from_str("2024-06-22T08:26:15").unwrap();
+        assert_eq!(now.weekday(), Weekday::Sat);
+
+        let schedule = Schedule::Daily(DailySchedule::new(
+            NaiveTime::from_str("06:00:00").unwrap(),
+            vec![Weekday::Sat, Weekday::Wed],
+        ));
+        assert_eq!(
+            schedule.calculate_next_trigger(now),
+            NaiveDateTime::from_str("2024-06-26T06:00:00").unwrap()
         );
     }
 
