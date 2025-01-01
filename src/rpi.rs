@@ -68,6 +68,8 @@ pub(crate) fn initialise_rpi() -> Result<Rpi> {
         let ledpin3 = gpio.get(PIN_LED_3)?.into_output_low();
         let ledpin4 = gpio.get(PIN_LED_4)?.into_output_low();
 
+        // This set_interrupt function has a debounce but it doesn't seem to work?
+        // I wonder how it's implemented.
         btnpin1.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
         btnpin2.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
         btnpin3.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
@@ -113,15 +115,15 @@ struct RealRpiInput {
     last_trigger_4: Instant,
 }
 
-fn debounce(button: Button, last_trigger: &mut Instant) -> Option<Button> {
+fn debounce(last_trigger: &mut Instant) -> bool {
     let now = Instant::now();
     let gap = now - *last_trigger;
-    debug!("Debouncer saw {:?} at {:?} (gap {:?})", button, now, gap);
+    debug!("Debouncer at {:?} (gap {:?})", now, gap);
     if gap >= DEBOUNCE_DELAY {
         *last_trigger = now;
-        Some(button)
+        true
     } else {
-        None
+        false
     }
 }
 
@@ -139,16 +141,17 @@ impl RpiInput for RealRpiInput {
                 .context("Failed to poll rpi gpio interrupts")?
             {
                 Some((pin, _)) => {
-                    let trigger = match pin.pin() {
-                        PIN_BUTTON_1 => debounce(Button::B1, &mut self.last_trigger_1),
-                        PIN_BUTTON_2 => debounce(Button::B2, &mut self.last_trigger_2),
-                        PIN_BUTTON_3 => debounce(Button::B3, &mut self.last_trigger_3),
-                        PIN_BUTTON_4 => debounce(Button::B4, &mut self.last_trigger_4),
+                    debug!("RPi input {:?}", pin);
+                    let (button, survives_debounce) = match pin.pin() {
+                        PIN_BUTTON_1 => (Button::B1, debounce(&mut self.last_trigger_1)),
+                        PIN_BUTTON_2 => (Button::B2, debounce(&mut self.last_trigger_2)),
+                        PIN_BUTTON_3 => (Button::B3, debounce(&mut self.last_trigger_3)),
+                        PIN_BUTTON_4 => (Button::B4, debounce(&mut self.last_trigger_4)),
                         unknown => panic!("Unexpected PIN value: {unknown}"),
                     };
-                    match trigger {
-                        Some(button) => return Ok(button),
-                        None => continue,
+
+                    if survives_debounce {
+                        return Ok(button);
                     }
                 }
                 None => {
