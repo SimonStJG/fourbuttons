@@ -68,10 +68,10 @@ pub(crate) fn initialise_rpi() -> Result<Rpi> {
         let ledpin3 = gpio.get(PIN_LED_3)?.into_output_low();
         let ledpin4 = gpio.get(PIN_LED_4)?.into_output_low();
 
-        btnpin1.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
-        btnpin2.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
-        btnpin3.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
-        btnpin4.set_interrupt(rppal::gpio::Trigger::FallingEdge)?;
+        btnpin1.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
+        btnpin2.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
+        btnpin3.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
+        btnpin4.set_interrupt(rppal::gpio::Trigger::FallingEdge, None)?;
 
         Ok(Rpi {
             input: Box::new(RealRpiInput {
