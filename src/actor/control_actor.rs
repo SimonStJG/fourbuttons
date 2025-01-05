@@ -75,10 +75,10 @@ where
             activity::Activity::TakePillsReminder => {
                 if self.application_state.take_pills_pending.is_some() {
                     // It's still pending!  Time to complain further
-                    if let Err(err) = self
-                        .email
-                        .send("Did you forget to take your pills you fool")
-                    {
+                    if let Err(err) = self.email.send(
+                        "Did you forget to take your pills",
+                        "Did you forget to take your pills you fool",
+                    ) {
                         error!("Failed to send email {:?}", err);
                     }
                 }
@@ -187,7 +187,7 @@ mod tests {
     struct FakeEmail {}
 
     impl Emailer for FakeEmail {
-        fn send(&self, _: &str) -> anyhow::Result<()> {
+        fn send(&self, _: &str, _: &str) -> anyhow::Result<()> {
             Ok(())
         }
     }

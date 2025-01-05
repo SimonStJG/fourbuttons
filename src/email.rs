@@ -3,7 +3,7 @@ use curl::easy::{Auth, Easy, Form};
 use log::info;
 
 pub(crate) trait Emailer {
-    fn send(&self, message: &str) -> Result<()>;
+    fn send(&self, title: &str, message: &str) -> Result<()>;
 }
 
 pub(crate) struct Email {
@@ -18,7 +18,7 @@ impl Email {
 }
 
 impl Emailer for Email {
-    fn send(&self, message: &str) -> Result<()> {
+    fn send(&self, title: &str, message: &str) -> Result<()> {
         let mut easy = Easy::new();
         let mut form = Form::new();
         form.part("from")
@@ -30,7 +30,7 @@ impl Emailer for Email {
             .add()
             .context("Failed to add to part")?;
         form.part("subject")
-            .contents("test".as_bytes())
+            .contents(title.as_bytes())
             .add()
             .context("Failed to add subject part")?;
         form.part("text")
@@ -79,6 +79,6 @@ mod tests {
             to_address.trim().to_owned(),
         );
 
-        email.send("hello world!").unwrap();
+        email.send("hello", "hello world!").unwrap();
     }
 }
