@@ -36,6 +36,10 @@ Automatically connect to the wifi on startup:
 
 Manually reserved 192.168.0.94 on the router.
 
+You can also do this manually by creating an nmconnection file in 
+/etc/NetworkManager/system-connections (e.g. copy the previous one
+and replace the SSID, password, etc).
+
 ## TODO
 
 Some things I could do?  But who has the time.
