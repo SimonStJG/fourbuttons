@@ -2,19 +2,21 @@
 
 set -euxo pipefail
 
+TARGET=192.168.1.94
+
 cargo fmt --check
 cargo clippy
 cargo test
 cross build --target arm-unknown-linux-gnueabihf --release
-ssh simon@192.168.0.94 "sudo systemctl stop fourbuttons"
+ssh simon@${TARGET} "sudo systemctl stop fourbuttons"
 scp target/arm-unknown-linux-gnueabihf/release/fourbuttons \
     fourbuttons.service \
     99-fourbuttons.rules \
     mailgun-apikey \
     to-address \
     selftest/selftest.sh \
-    simon@192.168.0.94:/home/simon/
-ssh simon@192.168.0.94 "
+    simon@${TARGET}:/home/simon/
+ssh simon@${TARGET} "
     set -euxo pipefail
 
     sudo mv fourbuttons.service /etc/systemd/system/fourbuttons.service
@@ -32,4 +34,4 @@ ssh simon@192.168.0.94 "
 
 echo 'Watching logs...'
 
-ssh simon@192.168.0.94 "journalctl -u fourbuttons -f"
+ssh simon@${TARGET} "journalctl -u fourbuttons -f"
