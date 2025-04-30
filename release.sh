@@ -12,6 +12,7 @@ scp target/arm-unknown-linux-gnueabihf/release/fourbuttons \
     99-fourbuttons.rules \
     mailgun-apikey \
     to-address \
+    selftest/selftest.sh \
     simon@192.168.0.94:/home/simon/
 ssh simon@192.168.0.94 "
     set -euxo pipefail
