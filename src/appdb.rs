@@ -20,6 +20,10 @@ pub(crate) const MIGRATIONS: &[Migration] = &[
         id: "002",
         sql: "ALTER TABLE application_state ADD COLUMN i_pending TIMESTAMP",
     },
+    Migration {
+        id: "003",
+        sql: "ALTER TABLE application_state ADD COLUMN clean_litter_tray_pending TIMESTAMP",
+    },
 ];
 
 pub(crate) struct AppDb {
@@ -41,16 +45,25 @@ impl AppDb {
         let i_pending = application_state
             .i_pending
             .map(|dt| fmt_naivedatetime_for_sqlite(&dt));
+        let clean_litter_tray_pending = application_state
+            .clean_litter_tray_pending
+            .map(|dt| fmt_naivedatetime_for_sqlite(&dt));
         conn.execute(
             "
                 INSERT INTO application_state (
                     take_pills_pending
                   , water_plants_pending
                   , i_pending
+                  , clean_litter_tray_pending
                 )
-                VALUES (?1, ?2, ?3)
+                VALUES (?1, ?2, ?3, ?4)
             ",
-            [&take_pills_pending, &water_plants_pending, &i_pending],
+            [
+                &take_pills_pending,
+                &water_plants_pending,
+                &i_pending,
+                &clean_litter_tray_pending,
+            ],
         )
         .context("Failed to update application state")?;
         Ok(())
@@ -65,6 +78,7 @@ impl AppDb {
                       take_pills_pending
                     , water_plants_pending 
                     , i_pending
+                    , clean_litter_tray_pending
                 FROM application_state
                 ORDER BY id DESC
                 LIMIT 1
@@ -75,6 +89,7 @@ impl AppDb {
                         row.get::<usize, Option<String>>(0)?,
                         row.get::<usize, Option<String>>(1)?,
                         row.get::<usize, Option<String>>(2)?,
+                        row.get::<usize, Option<String>>(3)?,
                     ))
                 },
             )
@@ -82,7 +97,7 @@ impl AppDb {
             .context("Failed to load application state")?;
 
         match result {
-            Some((take_pills, water_plants, i)) => {
+            Some((take_pills, water_plants, i, clean_litter_tray)) => {
                 let take_pills_pending = take_pills
                     .map(|dt: String| parse_naivedatetime_from_sqlite(&dt))
                     .transpose()?;
@@ -92,10 +107,15 @@ impl AppDb {
                 let i_pending = i
                     .map(|dt: String| parse_naivedatetime_from_sqlite(&dt))
                     .transpose()?;
+                let clean_litter_tray_pending = clean_litter_tray
+                    .map(|dt: String| parse_naivedatetime_from_sqlite(&dt))
+                    .transpose()?;
+
                 Ok(Some(ApplicationState {
                     take_pills_pending,
                     water_plants_pending,
                     i_pending,
+                    clean_litter_tray_pending,
                 }))
             }
             None => Ok(None),
@@ -135,10 +155,13 @@ mod tests {
         let take_pills_pending = Some(NaiveDateTime::from_str("2020-01-01T08:00:00").unwrap());
         let water_plants_pending = Some(NaiveDateTime::from_str("2020-01-02T08:00:01").unwrap());
         let i_pending = Some(NaiveDateTime::from_str("2020-01-02T08:00:02").unwrap());
+        let clean_litter_tray_pending =
+            Some(NaiveDateTime::from_str("2020-01-02T08:00:03").unwrap());
         let state = ApplicationState {
             take_pills_pending,
             water_plants_pending,
             i_pending,
+            clean_litter_tray_pending,
         };
         appdb.update_application_state(&state).unwrap();
 

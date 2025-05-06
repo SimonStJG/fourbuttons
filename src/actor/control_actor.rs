@@ -83,6 +83,13 @@ where
                     }
                 }
             }
+            activity::Activity::CleanLitterTray => {
+                self.application_state.clean_litter_tray_pending = Some(now);
+                self.send_led_state_change(Led::L2, LedState::On)?;
+                self.db
+                    .update_application_state(&self.application_state)
+                    .context("Failed to update application state")?;
+            }
         }
 
         Ok(())
@@ -109,13 +116,16 @@ where
             Button::B1 => {
                 self.application_state.take_pills_pending = None;
             }
-            Button::B2 | Button::Stop => {}
+            Button::B2 => {
+                self.application_state.clean_litter_tray_pending = None;
+            }
             Button::B3 => {
                 self.application_state.i_pending = None;
             }
             Button::B4 => {
                 self.application_state.water_plants_pending = None;
             }
+            Button::Stop => {}
         };
 
         self.db
@@ -243,7 +253,8 @@ mod tests {
             Some(ApplicationState {
                 take_pills_pending: Some(now),
                 water_plants_pending: None,
-                i_pending: None
+                i_pending: None,
+                clean_litter_tray_pending: None,
             })
         );
     }
